@@ -1,35 +1,42 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
+import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 
 function App() {
-  const [result, setResult] = useState<String[]>([]);
+  const [result, setResult] = useState<[{ name: string; path: string }] | null>(
+    null,
+  );
 
   async function updateQuery(e: React.ChangeEvent<HTMLInputElement>) {
-    setResult(await invoke("get_dirs", { query: e.currentTarget.value }));
+    setResult(await invoke("get_files", { filter: e.target.value }));
+    if (result !== null && result.length > 0) {
+      getCurrentWindow().setSize(new LogicalSize(600, 400));
+    }
   }
+  useEffect(() => {}, []);
   return (
     <div
       data-tauri-drag-region
-      className="h-screen w-screen-lg bg-zinc-800 flex flex-col items-center justify-center rounded-lg overflow-y-scroll"
+      className="h-screen w-screen flex flex-col items-center justify-start rounded-2xl bg-zinc-800 overflow-hidden"
     >
-      <div className="w-2/3 flex flex-col items-center justify-center">
-        <input
-          onChange={updateQuery}
-          placeholder="Query..."
-          className="w-full mt-5 p-2 border-2 border-gray-300 rounded-md"
-        />
-        <ul className="w-full h-96 flex flex-col justify-between items-center overflow-y-scroll">
-          {result.map((item, index) => (
-            <li
-              key={index}
-              className="w-1/2 p-2 border-2 border-gray-300 rounded-md"
-            >
-              {item}
-            </li>
-          ))}
-        </ul>
-      </div>
+      <input
+        onChange={updateQuery}
+        autoCapitalize="off"
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck="false"
+        placeholder="Query..."
+        className="w-full p-2 rounded-md bg-zinc-800 text-white outline-none focus:outline-none"
+      />
+
+      <ul className="w-full h-full flex flex-col justify-start items-center gap-[0.1rem] overflow-y-scroll">
+        {result?.map((item, index) => (
+          <li key={index} className="w-full p-2 text-white">
+            {item.name}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

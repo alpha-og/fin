@@ -1,25 +1,21 @@
-use walkdir::WalkDir;
-
-#[tauri::command]
-async fn get_dirs(query: &str) -> Result<Vec<String>, ()> {
-    let mut dirs: Vec<String> = Vec::new();
-    for entry in WalkDir::new(query)
-        .max_depth(1)
-        .into_iter()
-        .filter_map(Result::ok)
-    {
-        if let Some(path) = entry.path().to_str() {
-            dirs.push(path.to_string());
-        }
-    }
-    Ok(dirs)
-}
+mod db;
+use db::Db;
+use tauri::Manager;
+use tauri::State;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(Db::default())
+        .setup(|app| {
+            let handle = app.handle();
+
+            let app_state: State<Db> = handle.state();
+            *app_state.connection.lock().unwrap() = Db::init("/Users/athulanoop/.config/fin");
+            Ok(())
+        })
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![get_dirs])
+        .invoke_handler(tauri::generate_handler![db::get_files])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

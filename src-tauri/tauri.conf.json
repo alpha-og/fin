@@ -12,13 +12,10 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "titleBarStyle": "Overlay",
-        "hiddenTitle": true,
+        "decorations": false,
         "transparent": true,
         "title": "Fin",
-        "resizable": true,
-        "width": 800,
-        "height": 600
+        "resizable": false
       }
     ],
     "security": {
@@ -27,7 +24,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["app", "dmg"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
