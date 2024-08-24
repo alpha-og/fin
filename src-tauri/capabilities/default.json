@@ -7,6 +7,7 @@
     "core:default",
     "shell:allow-open",
     "core:window:default",
+    "core:window:allow-set-effects",
     "core:window:allow-set-size",
     "core:window:allow-close",
     "core:window:allow-hide",
@@ -14,6 +15,9 @@
     "core:window:allow-minimize",
     "core:window:allow-unmaximize",
     "core:window:allow-unminimize",
-    "core:window:allow-start-dragging"
+    "core:window:allow-start-dragging",
+    "global-shortcut:allow-is-registered",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister"
   ]
 }

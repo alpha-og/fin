@@ -13,8 +13,8 @@
     "windows": [
       {
         "decorations": false,
-        "transparent": true,
         "title": "Fin",
+        "transparent": true,
         "resizable": false
       }
     ],

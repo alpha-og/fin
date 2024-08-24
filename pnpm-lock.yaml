@@ -11,9 +11,15 @@ importers:
       '@tauri-apps/api':
         specifier: '>=2.0.0-rc.0'
         version: 2.0.0-rc.2
+      '@tauri-apps/plugin-global-shortcut':
+        specifier: 2.0.0-rc.0
+        version: 2.0.0-rc.0
       '@tauri-apps/plugin-shell':
         specifier: '>=2.0.0-rc.0'
         version: 2.0.0-rc.0
+      lucide-react:
+        specifier: ^0.435.0
+        version: 0.435.0(react@18.3.1)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -470,6 +476,9 @@ packages:
     engines: {node: '>= 10'}
     hasBin: true
 
+  '@tauri-apps/plugin-global-shortcut@2.0.0-rc.0':
+    resolution: {integrity: sha512-rcefV4AG+vnbTtGc07hDn4Uj8u//NpuqHVg1CShACyiCS0q2sZrDVC3qPN3RGhzQyeIOPq4bY1kQRHODffKXZA==}
+
   '@tauri-apps/plugin-shell@2.0.0-rc.0':
     resolution: {integrity: sha512-bhUcQcrqZoK8H1DFXapr5r1Z75oh6Kd5Tltz97XpZFLREEqp+KhN2Fvyh8r/fKAyenYsTYUIsDsyGdjdueuF9g==}
 
@@ -767,6 +776,11 @@ packages:
 
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
+
+  lucide-react@0.435.0:
+    resolution: {integrity: sha512-we5GKfzjMDw9m9SsyZJvWim9qaT+Ya5kaRS+OGFqgLqXUrPM1h+7CiMw5pKdEIoaBqfXz2pyv9TASAdpIAJs0Q==}
+    peerDependencies:
+      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0-rc
 
   merge2@1.4.1:
     resolution: {integrity: sha512-8q7VEgMJW4J8tcfVPy8g09NcQwZdbwFEqhe/WZkoIzjn/3TGDwtOCYtXGxA3O8tPzpczCCDgv+P2P5y00ZJOOg==}
@@ -1400,6 +1414,10 @@ snapshots:
       '@tauri-apps/cli-win32-ia32-msvc': 2.0.0-rc.5
       '@tauri-apps/cli-win32-x64-msvc': 2.0.0-rc.5
 
+  '@tauri-apps/plugin-global-shortcut@2.0.0-rc.0':
+    dependencies:
+      '@tauri-apps/api': 2.0.0-rc.2
+
   '@tauri-apps/plugin-shell@2.0.0-rc.0':
     dependencies:
       '@tauri-apps/api': 2.0.0-rc.2
@@ -1699,6 +1717,10 @@ snapshots:
   lru-cache@5.1.1:
     dependencies:
       yallist: 3.1.1
+
+  lucide-react@0.435.0(react@18.3.1):
+    dependencies:
+      react: 18.3.1
 
   merge2@1.4.1: {}
 
