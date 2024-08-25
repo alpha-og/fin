@@ -7,9 +7,23 @@ pub fn init(app: &mut tauri::App) {
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, shortcut, event| {
-                    let main_window = app.get_webview_window("main").unwrap();
                     if shortcut == &global_shortcut && event.state == ShortcutState::Pressed {
-                        if main_window.is_visible().unwrap() {
+                        let main_window = match app.get_webview_window("main") {
+                            Some(main_window) => main_window,
+                            None => {
+                                let main_window = tauri::WebviewWindowBuilder::from_config(
+                                    app,
+                                    app.config().app.windows.get(0).unwrap(),
+                                )
+                                .unwrap()
+                                .build()
+                                .unwrap();
+                                let _ = main_window.hide();
+                                main_window
+                            }
+                        };
+
+                        if main_window.is_focused().unwrap() {
                             let _ = main_window.hide();
                         } else {
                             let _ = main_window.show();
@@ -21,9 +35,4 @@ pub fn init(app: &mut tauri::App) {
         )
         .unwrap();
     app.global_shortcut().register(global_shortcut).unwrap();
-}
-
-#[tauri::command]
-pub fn hide_app(window: tauri::Window) {
-    let _ = window.hide();
 }
