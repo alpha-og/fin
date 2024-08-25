@@ -1,7 +1,7 @@
 {
   "productName": "fin",
   "version": "0.0.0",
-  "identifier": "com.tauri.dev",
+  "identifier": "com.fin.app",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -15,7 +15,8 @@
         "decorations": false,
         "title": "Fin",
         "transparent": true,
-        "resizable": false
+        "resizable": false,
+        "center": true
       }
     ],
     "security": {
