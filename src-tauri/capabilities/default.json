@@ -15,9 +15,6 @@
     "core:window:allow-minimize",
     "core:window:allow-unmaximize",
     "core:window:allow-unminimize",
-    "core:window:allow-start-dragging",
-    "global-shortcut:allow-is-registered",
-    "global-shortcut:allow-register",
-    "global-shortcut:allow-unregister"
+    "core:window:allow-start-dragging"
   ]
 }
