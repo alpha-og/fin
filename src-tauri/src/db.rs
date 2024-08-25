@@ -1,6 +1,7 @@
 use rusqlite::Connection;
 use std::collections::HashMap;
 use std::sync::Mutex;
+use tauri::Manager;
 use tauri::State;
 use walkdir::WalkDir;
 
@@ -20,8 +21,10 @@ impl Default for Db {
     }
 }
 impl Db {
-    pub fn init(_path: &str) -> Option<Connection> {
+    pub fn init(app: &mut tauri::App, _path: &str) {
         // let connection = Connection::open(format!("{path}/cache.db")).unwrap();
+        let handle = app.handle();
+        let app_state: State<Db> = handle.state();
         let connection = Connection::open_in_memory().unwrap();
         connection
             .execute(
@@ -32,23 +35,21 @@ impl Db {
             )
             .unwrap();
         Self::index_files(&connection);
-        Some(connection)
+        *app_state.connection.lock().unwrap() = Some(connection);
     }
     fn index_files(connection: &Connection) {
         let mut files = HashMap::new();
-        for entry in WalkDir::new("/Users/athulanoop/.config/")
+        for entry in WalkDir::new("/Users/athulanoop/Software Projects/")
             .min_depth(1)
             .max_depth(5)
             .follow_links(true)
             .into_iter()
             .filter_map(Result::ok)
         {
-            if entry.file_type().is_file() {
-                files.insert(
-                    String::from(entry.file_name().to_string_lossy()),
-                    String::from(entry.path().to_string_lossy()),
-                );
-            }
+            files.insert(
+                String::from(entry.file_name().to_string_lossy()),
+                String::from(entry.path().to_string_lossy()),
+            );
         }
         for (file_name, file_path) in files.iter() {
             connection
