@@ -9,6 +9,7 @@ function App() {
   const [result, setResult] = useState<[{ name: string; path: string }] | null>(
     null,
   );
+  const [selected, setSelected] = useState<number | null>(null);
   const currentWindow = getCurrentWindow();
   const clearSearchRef = useHotkeys<HTMLInputElement>(
     "escape, ctrl+[",
@@ -18,26 +19,52 @@ function App() {
         currentWindow.hide();
       }
       target.value = "";
+      setResult(null);
     },
     {
       preventDefault: true,
       enableOnFormTags: ["INPUT"],
     },
   );
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  async function updateQuery(e: React.ChangeEvent<HTMLInputElement>) {
-    if (e.target.value.length > 0) {
-      setResult(await invoke("get_files", { filter: e.target.value }));
-      if (result !== null && result.length > 0) {
-        currentWindow.setSize(new LogicalSize(600, 400));
-      } else {
-        currentWindow.setSize(new LogicalSize(600, 50));
+  useHotkeys(
+    "ArrowDown, ctrl+j",
+    () => {
+      if (result !== null) {
+        if (selected === null) {
+          setSelected(0);
+        } else {
+          setSelected((selected + 1) % result.length);
+        }
       }
-    } else {
-      setResult(null);
-      currentWindow.setSize(new LogicalSize(600, 50));
-    }
+    },
+    {
+      preventDefault: true,
+      enableOnFormTags: ["INPUT"],
+    },
+  );
+
+  useHotkeys(
+    "ArrowUp, ctrl+k",
+    () => {
+      if (result !== null) {
+        if (selected === null) {
+          setSelected(result.length - 1);
+        } else {
+          setSelected((selected + result.length - 1) % result.length);
+        }
+      }
+    },
+    {
+      preventDefault: true,
+      enableOnFormTags: ["INPUT"],
+    },
+  );
+
+  const inputRef = useRef<HTMLInputElement>(null);
+  async function updateQuery(e: React.ChangeEvent<HTMLInputElement>) {
+    if (e.target.value.length > 0)
+      setResult(await invoke("get_files", { filter: e.target.value }));
+    else setResult(null);
   }
 
   useEffect(() => {
@@ -47,6 +74,20 @@ function App() {
   useEffect(() => {
     clearSearchRef.current = inputRef.current;
   }, [inputRef]);
+  useEffect(() => {
+    if (result !== null && result.length > 0) {
+      currentWindow.setSize(new LogicalSize(600, 400));
+      setSelected(null);
+    } else {
+      currentWindow.setSize(new LogicalSize(600, 50));
+    }
+  }, [result]);
+  useEffect(() => {
+    if (selected !== null) {
+      const element = document.querySelectorAll("li")[selected];
+      element.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [selected]);
   return (
     <div
       data-tauri-drag-region
@@ -70,9 +111,15 @@ function App() {
         />
       </div>
       {result !== null && (
-        <ul className="w-full h-full flex flex-col justify-start items-center gap-[0.1rem] overflow-y-scroll">
+        <ul className="w-full h-full p-2 flex flex-col justify-start items-center gap-1 overflow-y-scroll overflow-x-hidden no-scrollbar">
           {result?.map((item, index) => (
-            <li key={index} className="w-full p-2 text-white">
+            <li
+              key={index}
+              className={`w-full p-2 text-white rounded-xl text-ellipsis overflow-x-clip ${index === selected && "bg-blue-400/40"}`}
+              onClick={() => {
+                setSelected(index);
+              }}
+            >
               {item.name}
             </li>
           ))}
