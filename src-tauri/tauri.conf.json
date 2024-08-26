@@ -16,7 +16,12 @@
         "title": "Fin",
         "transparent": true,
         "resizable": false,
-        "center": true
+        "width": 600,
+        "height": 50,
+        "windowEffects": {
+          "effects": [],
+          "radius": 25
+        }
       }
     ],
     "security": {

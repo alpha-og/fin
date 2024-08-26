@@ -68,10 +68,6 @@ function App() {
   }
 
   useEffect(() => {
-    currentWindow.setSize(new LogicalSize(600, 50));
-    currentWindow.setEffects({ radius: 25, effects: [] });
-  }, []);
-  useEffect(() => {
     clearSearchRef.current = inputRef.current;
   }, [inputRef]);
   useEffect(() => {
