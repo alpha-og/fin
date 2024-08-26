@@ -10,15 +10,6 @@ function App() {
     null,
   );
   const currentWindow = getCurrentWindow();
-  useHotkeys(
-    "escape, ctrl+[",
-    async () => {
-      currentWindow.hide();
-    },
-    {
-      preventDefault: true,
-    },
-  );
   const clearSearchRef = useHotkeys<HTMLInputElement>(
     "escape, ctrl+[",
     (e) => {
@@ -27,7 +18,6 @@ function App() {
         currentWindow.hide();
       }
       target.value = "";
-      target.blur();
     },
     {
       preventDefault: true,
@@ -40,19 +30,19 @@ function App() {
     if (e.target.value.length > 0) {
       setResult(await invoke("get_files", { filter: e.target.value }));
       if (result !== null && result.length > 0) {
-        getCurrentWindow().setSize(new LogicalSize(600, 400));
+        currentWindow.setSize(new LogicalSize(600, 400));
       } else {
-        getCurrentWindow().setSize(new LogicalSize(600, 50));
+        currentWindow.setSize(new LogicalSize(600, 50));
       }
     } else {
       setResult(null);
-      getCurrentWindow().setSize(new LogicalSize(600, 50));
+      currentWindow.setSize(new LogicalSize(600, 50));
     }
   }
 
   useEffect(() => {
-    getCurrentWindow().setSize(new LogicalSize(600, 50));
-    getCurrentWindow().setEffects({ radius: 25, effects: [] });
+    currentWindow.setSize(new LogicalSize(600, 50));
+    currentWindow.setEffects({ radius: 25, effects: [] });
   }, []);
   useEffect(() => {
     clearSearchRef.current = inputRef.current;

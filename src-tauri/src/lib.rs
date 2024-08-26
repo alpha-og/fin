@@ -8,7 +8,7 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Focused(focused) = event {
                 if !*focused {
-                    window.close().expect("Window should have closed");
+                    window.hide().expect("Window should have closed");
                 };
             };
         })
