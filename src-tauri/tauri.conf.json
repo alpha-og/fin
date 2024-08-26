@@ -1,6 +1,6 @@
 {
   "productName": "fin",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "identifier": "com.fin.app",
   "build": {
     "beforeDevCommand": "pnpm dev",
