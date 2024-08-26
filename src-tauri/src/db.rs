@@ -52,12 +52,13 @@ impl Db {
             );
         }
         for (file_name, file_path) in files.iter() {
-            connection
-                .execute(
-                    &format!("insert into file_system values ('{file_name}', '{file_path}');"),
-                    (),
-                )
-                .unwrap();
+            if let Err(error) = connection.execute(
+                &format!("insert into file_system values ('{file_name}', '{file_path}');"),
+                (),
+            ) {
+                println!("{error}");
+            } else {
+            };
         }
     }
 }
