@@ -13,7 +13,6 @@ pub fn run() {
             };
         })
         .plugin(tauri_plugin_fs::init())
-        .manage(Db::default())
         .setup(|app| {
             #[cfg(desktop)]
             keymaps::init(app);

@@ -1,45 +1,50 @@
 use rusqlite::Connection;
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tauri::Manager;
 use tauri::State;
 use walkdir::WalkDir;
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone)]
 pub struct File {
     pub name: String,
     pub path: String,
 }
 pub struct Db {
-    pub connection: Mutex<Option<Connection>>,
+    pub connection: Arc<Mutex<Option<Connection>>>,
 }
 impl Default for Db {
     fn default() -> Self {
         Self {
-            connection: Mutex::new(None),
+            connection: Arc::new(Mutex::new(None)),
         }
     }
 }
 impl Db {
     pub fn init(app: &mut tauri::App, _path: &str) {
         // let connection = Connection::open(format!("{path}/cache.db")).unwrap();
-        let handle = app.handle();
-        let app_state: State<Db> = handle.state();
-        let connection = Connection::open_in_memory().unwrap();
-        connection
-            .execute(
-                "create table if not exists file_system(
+        app.manage(Db {
+            connection: Arc::new(Mutex::new(Some(Connection::open_in_memory().unwrap()))),
+        });
+        let db_state = app.state::<Db>();
+        let arced_connection = Arc::clone(&db_state.connection);
+        std::thread::spawn(move || {
+            let state_connection = arced_connection.lock().unwrap();
+            let connection = state_connection.as_ref().unwrap();
+            connection
+                .execute(
+                    "create table if not exists file_system(
         name text not null,
         path text not null)",
-                (),
-            )
-            .unwrap();
-        Self::index_files(&connection);
-        *app_state.connection.lock().unwrap() = Some(connection);
+                    (),
+                )
+                .unwrap();
+            Self::index_files(connection);
+        });
     }
     fn index_files(connection: &Connection) {
         let mut files = HashMap::new();
-        for entry in WalkDir::new("/Users/athulanoop/Software Projects/")
+        for entry in WalkDir::new("/Users/athulanoop/")
             .min_depth(1)
             .max_depth(5)
             .follow_links(true)
@@ -83,5 +88,9 @@ pub async fn get_files(state: State<'_, Db>, filter: String) -> Result<Vec<File>
             files.push(row);
         }
     }
-    Ok(files)
+    if files.len() > 100 {
+        Ok(files[..100].into())
+    } else {
+        Ok(files)
+    }
 }
