@@ -1,14 +1,19 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, createRef, RefObject } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 import { SearchIcon } from "lucide-react";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
-import { useHotkeys } from "react-hotkeys-hook";
+import { useHotkeys, isHotkeyPressed } from "react-hotkeys-hook";
 
 function App() {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listItemRefs = useRef<RefObject<HTMLLIElement>[]>([]);
   const [result, setResult] = useState<[{ name: string; path: string }] | null>(
     null,
   );
+  const [query, setQuery] = useState<string>("");
+  const [history, setHistory] = useState<string[]>([]);
+  const [selectedHistory, setSelectedHistory] = useState<number | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const currentWindow = getCurrentWindow();
   const clearSearchRef = useHotkeys<HTMLInputElement>(
@@ -26,11 +31,39 @@ function App() {
       enableOnFormTags: ["INPUT"],
     },
   );
+  const cycleHistoryRef = useHotkeys(
+    "ctrl+p, ctrl+n",
+    () => {
+      if (history.length === 0) return;
+      if (isHotkeyPressed("p")) {
+        if (selectedHistory === null) {
+          setSelectedHistory(history.length - 1);
+        } else
+          setSelectedHistory(
+            (selectedHistory + history.length - 1) % history.length,
+          );
+      } else {
+        if (selectedHistory === null) return;
+        else setSelectedHistory((selectedHistory + 1) % history.length);
+      }
+    },
+    {
+      preventDefault: true,
+      enableOnFormTags: ["INPUT"],
+    },
+  );
+
+  const selectedListItemRef = useHotkeys("escape, ctrl+[", () => {
+    inputRef.current?.focus();
+    setSelected(null);
+  });
+
   useHotkeys(
     "ArrowDown, ctrl+j",
     () => {
       if (result !== null) {
         if (selected === null) {
+          setHistory([...history, query]);
           setSelected(0);
         } else {
           setSelected((selected + 1) % result.length);
@@ -48,6 +81,7 @@ function App() {
     () => {
       if (result !== null) {
         if (selected === null) {
+          setHistory([...history, query]);
           setSelected(result.length - 1);
         } else {
           setSelected((selected + result.length - 1) % result.length);
@@ -60,19 +94,22 @@ function App() {
     },
   );
 
-  const inputRef = useRef<HTMLInputElement>(null);
-  async function updateQuery(e: React.ChangeEvent<HTMLInputElement>) {
-    if (e.target.value.length > 0)
-      setResult(await invoke("get_files", { filter: e.target.value }));
+  async function updateResults() {
+    if (query.length > 0)
+      setResult(await invoke("get_files", { filter: query }));
     else setResult(null);
   }
 
   useEffect(() => {
     clearSearchRef.current = inputRef.current;
+    cycleHistoryRef.current = inputRef.current;
   }, [inputRef]);
   useEffect(() => {
     if (result !== null && result.length > 0) {
       currentWindow.setSize(new LogicalSize(600, 400));
+      listItemRefs.current = Array(result.length)
+        .fill(null)
+        .map(() => createRef<HTMLLIElement>());
       setSelected(null);
     } else {
       currentWindow.setSize(new LogicalSize(600, 50));
@@ -80,14 +117,30 @@ function App() {
   }, [result]);
   useEffect(() => {
     if (selected !== null) {
-      const element = document.querySelectorAll("li")[selected];
-      element.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      selectedListItemRef.current = listItemRefs.current[selected].current;
+      const listItem = listItemRefs.current[selected];
+      listItem?.current?.focus();
+      listItem?.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
     }
   }, [selected]);
+  useEffect(() => {
+    updateResults();
+  }, [query]);
+  useEffect(() => {
+    console.log(history);
+  }, [history]);
+  useEffect(() => {
+    if (selectedHistory !== null) {
+      setQuery(history[selectedHistory]);
+    }
+  }, [selectedHistory]);
   return (
     <div
       data-tauri-drag-region
-      className="h-screen w-screen flex flex-col items-center justify-start rounded-2xl bg-zinc-800 overflow-hidden"
+      className="h-screen w-screen p-1 flex flex-col items-center justify-start rounded-2xl bg-zinc-800 overflow-hidden"
     >
       <div
         data-tauri-drag-region
@@ -96,7 +149,9 @@ function App() {
         <SearchIcon />
         <input
           ref={inputRef}
-          onChange={updateQuery}
+          tabIndex={0}
+          onChange={(e) => setQuery(e.target.value)}
+          value={query}
           autoCapitalize="off"
           autoComplete="off"
           autoCorrect="off"
@@ -107,11 +162,16 @@ function App() {
         />
       </div>
       {result !== null && (
-        <ul className="w-full h-full p-2 flex flex-col justify-start items-center gap-1 overflow-y-scroll overflow-x-hidden no-scrollbar">
+        <ul
+          tabIndex={1}
+          className="w-full h-full p-1 flex flex-col justify-start items-center gap-1 overflow-y-scroll overflow-x-hidden no-scrollbar outline-none focus:outline-none"
+        >
           {result?.map((item, index) => (
             <li
+              ref={listItemRefs.current[index]}
+              tabIndex={index + 2}
               key={index}
-              className={`w-full p-2 text-white rounded-xl text-ellipsis overflow-x-clip ${index === selected && "bg-blue-400/40"}`}
+              className={`w-full p-2 text-white rounded-xl text-ellipsis overflow-x-clip outline-none focus:outline-none ${index === selected && "bg-white/20"}`}
               onClick={() => {
                 setSelected(index);
               }}
