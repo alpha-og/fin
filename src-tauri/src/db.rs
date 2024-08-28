@@ -23,23 +23,27 @@ impl Default for Db {
 impl Db {
     pub fn init(app: &mut tauri::App, _path: &str) {
         // let connection = Connection::open(format!("{path}/cache.db")).unwrap();
+        let connection = Connection::open_in_memory().map_or(None, |connection| Some(connection));
         app.manage(Db {
-            connection: Arc::new(Mutex::new(Some(Connection::open_in_memory().unwrap()))),
+            connection: Arc::new(Mutex::new(connection)),
         });
         let db_state = app.state::<Db>();
         let arced_connection = Arc::clone(&db_state.connection);
         std::thread::spawn(move || {
             let state_connection = arced_connection.lock().unwrap();
-            let connection = state_connection.as_ref().unwrap();
-            connection
-                .execute(
-                    "create table if not exists file_system(
+            if let Some(connection) = state_connection.as_ref() {
+                connection
+                    .execute(
+                        "create table if not exists file_system(
         name text not null,
         path text not null)",
-                    (),
-                )
-                .unwrap();
-            Self::index_files(connection);
+                        (),
+                    )
+                    .unwrap();
+                Self::index_files(connection);
+            } else {
+                println!("Database connection could not be acquired");
+            }
         });
     }
     fn index_files(connection: &Connection) {
