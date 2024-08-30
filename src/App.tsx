@@ -130,9 +130,6 @@ function App() {
     updateResults();
   }, [query]);
   useEffect(() => {
-    console.log(history);
-  }, [history]);
-  useEffect(() => {
     if (selectedHistory !== null) {
       setQuery(history[selectedHistory]);
     }
@@ -144,7 +141,7 @@ function App() {
     >
       <div
         data-tauri-drag-region
-        className="w-full p-3 flex flex-row items-center gap-1 rounded-md bg-zinc-800 text-white"
+        className="w-full px-3 py-2 flex flex-row items-center gap-1 rounded-md bg-zinc-800 text-white"
       >
         <SearchIcon />
         <input
@@ -171,12 +168,16 @@ function App() {
               ref={listItemRefs.current[index]}
               tabIndex={index + 2}
               key={index}
-              className={`w-full p-2 text-white rounded-xl text-ellipsis overflow-x-clip outline-none focus:outline-none ${index === selected && "bg-white/20"}`}
+              className={`w-full p-2 flex flex-col justify-evenly items-start text-white rounded-xl text-ellipsis overflow-x-clip outline-none focus:outline-none ${index === selected && "bg-white/20"}`}
               onClick={() => {
+                setHistory([...history, query]);
                 setSelected(index);
               }}
             >
-              {item.name}
+              <span className="text-ellipsis overflow-x-clip">{item.name}</span>{" "}
+              <span className="w-full text-ellipsis overflow-x-clip text-neutral-400">
+                {item.path}
+              </span>
             </li>
           ))}
         </ul>
