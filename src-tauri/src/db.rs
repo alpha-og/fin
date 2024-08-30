@@ -21,9 +21,10 @@ impl Default for Db {
     }
 }
 impl Db {
-    pub fn init(app: &mut tauri::App, _path: &str) {
+    pub fn init(app: &mut tauri::App, path: &str) {
         // let connection = Connection::open(format!("{path}/cache.db")).unwrap();
-        let connection = Connection::open_in_memory().map_or(None, |connection| Some(connection));
+        let connection = Connection::open(format!("{path}/cache.db"))
+            .map_or(None, |connection| Some(connection));
         app.manage(Db {
             connection: Arc::new(Mutex::new(connection)),
         });
@@ -37,6 +38,12 @@ impl Db {
                         "create table if not exists file_system(
         name text not null,
         path text not null)",
+                        (),
+                    )
+                    .unwrap();
+                connection
+                    .execute(
+                        "create unique index if not exists idx_name on file_system(name);",
                         (),
                     )
                     .unwrap();
@@ -55,6 +62,16 @@ impl Db {
             .into_iter()
             .filter_map(Result::ok)
         {
+            if entry
+                .file_name()
+                .to_string_lossy()
+                .to_string()
+                .chars()
+                .next()
+                == Some('.')
+            {
+                continue;
+            }
             files.insert(
                 String::from(entry.file_name().to_string_lossy()),
                 String::from(entry.path().to_string_lossy()),
@@ -62,7 +79,9 @@ impl Db {
         }
         for (file_name, file_path) in files.iter() {
             if let Err(error) = connection.execute(
-                &format!("insert into file_system values ('{file_name}', '{file_path}');"),
+                &format!(
+                    "insert or replace into file_system values ('{file_name}', '{file_path}');"
+                ),
                 (),
             ) {
                 println!("{error}");
