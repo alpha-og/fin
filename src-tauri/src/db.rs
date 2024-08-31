@@ -1,5 +1,9 @@
-use rusqlite::Connection;
+use directories::BaseDirs;
+use dotenvy::dotenv;
+use sqlx::Row;
 use std::collections::HashMap;
+use std::env;
+use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
 use tauri::State;
@@ -11,63 +15,55 @@ pub struct File {
     pub path: String,
 }
 pub struct Db {
-    pub connection: Arc<Mutex<Option<Connection>>>,
+    pub pool: Arc<Mutex<sqlx::SqlitePool>>,
 }
-impl Default for Db {
-    fn default() -> Self {
-        Self {
-            connection: Arc::new(Mutex::new(None)),
-        }
-    }
-}
+
 impl Db {
-    pub fn init(app: &mut tauri::App, path: &str) {
-        let connection = Connection::open(format!("{path}/file_system_cache.sqlite"))
-            .map_or(None, |connection| Some(connection));
+    pub fn init(app: &mut tauri::App, database_url: Option<String>) {
+        dotenv().ok();
+        let database_url = Self::get_database_url(database_url);
+        let pool =
+            tauri::async_runtime::block_on(sqlx::SqlitePool::connect(&database_url)).unwrap();
         app.manage(Db {
-            connection: Arc::new(Mutex::new(connection)),
+            pool: Arc::new(Mutex::new(pool)),
         });
         let db_state = app.state::<Db>();
-        Db::create_tables(&db_state);
+        let pool_arc = Arc::clone(&db_state.pool);
+        std::thread::spawn(move || {
+            let pool_state = pool_arc.lock().unwrap();
+            let pool = pool_state.deref();
+            tauri::async_runtime::block_on(sqlx::migrate!().run(pool)).unwrap();
+        });
+
+        let db_state = app.state::<Db>();
         Db::cache_file_system(&db_state);
     }
-    fn create_tables(db_state: &State<Db>) {
-        let connection_arc = Arc::clone(&db_state.connection);
-        std::thread::spawn(move || {
-            let mut state_connection = connection_arc.lock().unwrap();
-            if let Some(connection) = state_connection.as_mut() {
-                let transaction = connection.transaction().unwrap();
-                transaction
-                    .execute(
-                        "CREATE TABLE IF NOT EXISTS file_system(
-        name TEXT NOT NULL,
-        path TEXT NOT NULL)",
-                        (),
-                    )
-                    .unwrap();
-                transaction
-                    .execute(
-                        "CREATE UNIQUE INDEX IF NOT EXISTS idx_name ON file_system(name);",
-                        (),
-                    )
-                    .unwrap();
-                transaction.execute("CREATE TABLE IF NOT EXISTS query_history(query TEXT NOT NULL, created_at DEFAULT CURRENT_TIMESTAMP, modified_at DEFAULT CURRENT_TIMESTAMP)", ()).unwrap();
-                transaction
-                    .execute(
-                        "CREATE UNIQUE INDEX IF NOT EXISTS idx_query ON query_history(query);",
-                        (),
-                    )
-                    .unwrap();
-
-                let _ = transaction.commit();
-            } else {
-                println!("Database connection could not be acquired");
+    fn get_database_url(database_url: Option<String>) -> String {
+        if let Some(database_url) = database_url {
+            database_url
+        } else {
+            match env::var("DATABASE_URL") {
+                Ok(database_url) => database_url,
+                Err(..) => {
+                    if let Some(base_dirs) = BaseDirs::new() {
+                        let home_dir = base_dirs.home_dir();
+                        println!("Default path");
+                        String::from(
+                            std::path::Path::join(home_dir, ".config/fin/cache.sqlite")
+                                .to_str()
+                                .unwrap(),
+                        )
+                    } else {
+                        String::from("sqlite:cache.sqlite")
+                    }
+                }
             }
-        });
+        }
     }
+
     fn index_file_system() -> HashMap<String, String> {
         let mut files = HashMap::new();
-        for entry in WalkDir::new("/Users/athulanoop/")
+        for entry in WalkDir::new("/Users/athulanoop/Software Projects/")
             .min_depth(1)
             .max_depth(5)
             .follow_links(true)
@@ -89,25 +85,26 @@ impl Db {
         files
     }
     fn cache_file_system(db_state: &State<Db>) {
-        let connection_arc = Arc::clone(&db_state.connection);
+        dbg!("Caching file system");
+        let pool_arc = Arc::clone(&db_state.pool);
         std::thread::spawn(move || {
             let files = Self::index_file_system();
-            let mut state_connection = connection_arc.lock().unwrap();
-            if let Some(connection) = state_connection.as_mut() {
-                let transaction = connection.transaction().unwrap();
-                for (file_name, file_path) in files.iter() {
-                    if let Err(error) = transaction.execute(
-                        &format!(
-                    "insert or replace into file_system values ('{file_name}', '{file_path}');"
-                ),
-                        (),
-                    ) {
-                        println!("{error} | {file_name} | {file_path}");
-                    } else {
-                    };
+            let pool = pool_arc.lock().unwrap();
+            tauri::async_runtime::block_on(async {
+                let query = "INSERT OR REPLACE INTO filesystem (name, path) VALUES ($1, $2)";
+                dbg!("Creating transactions for file system index");
+                let mut tx = pool.begin().await.unwrap();
+                for (name, path) in files {
+                    let _ = sqlx::query(query)
+                        .bind(&name)
+                        .bind(&path)
+                        .execute(&mut *tx)
+                        .await;
                 }
-                let _ = transaction.commit();
-            }
+                dbg!("Committing transactions for file system index");
+                tx.commit().await.unwrap();
+                dbg!("Completed caching file system");
+            })
         });
     }
     // fn cache_query_history(connection: &mut Connection, queries: Vec<String>) {
@@ -116,28 +113,30 @@ impl Db {
 }
 
 #[tauri::command]
-pub async fn get_files(state: State<'_, Db>, filter: String) -> Result<Vec<File>, String> {
-    let mut state = state.connection.lock().unwrap();
-    let connection = state.as_mut().unwrap();
-    let mut query = connection.prepare("select * from file_system").unwrap();
-    let rows = query
-        .query_map((), |row| {
-            Ok(File {
-                name: row.get(0).unwrap(),
-                path: row.get(1).unwrap(),
-            })
+pub async fn get_files(app_handle: tauri::AppHandle, filter: String) -> Result<Vec<File>, String> {
+    let db_state = app_handle.state::<Db>();
+    let pool_arc = Arc::clone(&db_state.pool);
+    let files = std::thread::spawn(move || {
+        let pool_state = pool_arc.lock().unwrap();
+        let pool = pool_state.deref();
+
+        tauri::async_runtime::block_on(async {
+            let records = sqlx::query(&format!(
+                "SELECT * FROM filesystem WHERE name like '%{filter}%' OR path like '%{filter}%' LIMIT 100"
+            ))
+            .fetch_all(pool)
+            .await
+            .unwrap();
+            records
+                .iter()
+                .map(|record| File {
+                    name: record.get("name"),
+                    path: record.get("path"),
+                })
+                .collect::<Vec<File>>()
         })
-        .unwrap();
-    let mut files = Vec::new();
-    for row in rows {
-        let row = row.unwrap();
-        if row.name.contains(&filter) {
-            files.push(row);
-        }
-    }
-    if files.len() > 100 {
-        Ok(files[..100].into())
-    } else {
-        Ok(files)
-    }
+    })
+    .join()
+    .unwrap();
+    Ok(files)
 }
