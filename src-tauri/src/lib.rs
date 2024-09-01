@@ -18,6 +18,7 @@ pub fn run() {
             #[cfg(desktop)]
             keymaps::init(app);
             Db::init(app, None);
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![db::get_files])
