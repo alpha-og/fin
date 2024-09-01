@@ -15,13 +15,9 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
-            println!("cargo:rerun-if-changed=migrations");
             #[cfg(desktop)]
             keymaps::init(app);
-            Db::init(
-                app,
-                Some("/Users/athulanoop/.config/fin/cache.sqlite".to_string()),
-            );
+            Db::init(app, None);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![db::get_files])
