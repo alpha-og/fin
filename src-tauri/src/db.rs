@@ -1,18 +1,49 @@
 use directories::BaseDirs;
 use dotenvy::dotenv;
 use sqlx::Row;
-use std::collections::HashMap;
 use std::env;
 use std::ops::Deref;
+use std::os::unix::fs::MetadataExt;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
 use tauri::State;
 use walkdir::WalkDir;
+#[derive(serde::Serialize, Clone)]
+pub enum EntryKind {
+    File,
+    Directory,
+    Symlink,
+}
+
+impl From<&str> for EntryKind {
+    fn from(value: &str) -> Self {
+        match value {
+            "file" => Self::File,
+            "directory" => Self::Directory,
+            "symlink" => Self::Symlink,
+            _ => panic!("Failed to parse file kind!"),
+        }
+    }
+}
+
+impl EntryKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::File => "file",
+            Self::Directory => "directory",
+            Self::Symlink => "symlink",
+        }
+    }
+}
 
 #[derive(serde::Serialize, Clone)]
-pub struct File {
+pub struct Entry {
     pub name: String,
     pub path: String,
+    pub kind: EntryKind,
+    pub ctime: i64,
+    pub mtime: i64,
+    pub atime: i64,
 }
 pub struct Db {
     pub pool: Arc<Mutex<sqlx::SqlitePool>>,
@@ -61,9 +92,9 @@ impl Db {
         }
     }
 
-    fn index_file_system() -> HashMap<String, String> {
-        let mut files = HashMap::new();
-        for entry in WalkDir::new("/Users/athulanoop/Software Projects/")
+    fn index_file_system() -> Vec<Entry> {
+        let mut files = Vec::new();
+        for entry in WalkDir::new(BaseDirs::new().unwrap().home_dir())
             .min_depth(1)
             .max_depth(5)
             .follow_links(true)
@@ -77,10 +108,24 @@ impl Db {
             })
             .filter_map(Result::ok)
         {
-            files.insert(
-                String::from(entry.file_name().to_string_lossy()),
-                String::from(entry.path().to_string_lossy()),
-            );
+            let metadata = entry.metadata();
+            if let Ok(metadata) = metadata {
+                let kind = if metadata.is_file() {
+                    EntryKind::File
+                } else if metadata.is_dir() {
+                    EntryKind::Directory
+                } else {
+                    EntryKind::Symlink
+                };
+                files.push(Entry {
+                    name: entry.file_name().to_string_lossy().to_string(),
+                    path: entry.path().to_string_lossy().to_string(),
+                    kind,
+                    ctime: metadata.ctime(),
+                    mtime: metadata.mtime(),
+                    atime: metadata.atime(),
+                })
+            }
         }
         files
     }
@@ -88,16 +133,28 @@ impl Db {
         dbg!("Caching file system");
         let pool_arc = Arc::clone(&db_state.pool);
         std::thread::spawn(move || {
-            let files = Self::index_file_system();
+            let entries = Self::index_file_system();
             let pool = pool_arc.lock().unwrap();
             tauri::async_runtime::block_on(async {
-                let query = "INSERT OR REPLACE INTO filesystem (name, path) VALUES ($1, $2)";
+                let query = "INSERT OR REPLACE INTO filesystem (name, path, kind, ctime, mtime, atime) VALUES ($1, $2, $3, $4, $5, $6)";
                 dbg!("Creating transactions for file system index");
                 let mut tx = pool.begin().await.unwrap();
-                for (name, path) in files {
+                for Entry {
+                    name,
+                    path,
+                    kind,
+                    ctime,
+                    mtime,
+                    atime,
+                } in entries
+                {
                     let _ = sqlx::query(query)
                         .bind(&name)
                         .bind(&path)
+                        .bind(kind.as_str())
+                        .bind(&ctime)
+                        .bind(&mtime)
+                        .bind(&atime)
                         .execute(&mut *tx)
                         .await;
                 }
@@ -107,33 +164,44 @@ impl Db {
             })
         });
     }
-    // fn cache_query_history(connection: &mut Connection, queries: Vec<String>) {
-    //     std::thread::spawn(move || {});
-    // }
+}
+
+#[derive(serde::Serialize, Clone)]
+pub struct EntryResponse {
+    pub name: String,
+    pub path: String,
+    pub kind: EntryKind,
 }
 
 #[tauri::command]
-pub async fn get_files(app_handle: tauri::AppHandle, filter: String) -> Result<Vec<File>, String> {
+pub async fn get_files(
+    app_handle: tauri::AppHandle,
+    filter: String,
+) -> Result<Vec<EntryResponse>, String> {
     let db_state = app_handle.state::<Db>();
     let pool_arc = Arc::clone(&db_state.pool);
+    let filter = format!("%{filter}%");
     let files = std::thread::spawn(move || {
         let pool_state = pool_arc.lock().unwrap();
         let pool = pool_state.deref();
 
         tauri::async_runtime::block_on(async {
-            let records = sqlx::query(&format!(
-                "SELECT * FROM filesystem WHERE name like '%{filter}%' OR path like '%{filter}%' LIMIT 100"
-            ))
+            let records = sqlx::query(
+                "SELECT * FROM filesystem WHERE name like $1 OR path like $2 ORDER BY atime DESC LIMIT 100",
+            )
+            .bind(&filter)
+            .bind(&filter)
             .fetch_all(pool)
             .await
             .unwrap();
             records
                 .iter()
-                .map(|record| File {
+                .map(|record| EntryResponse {
                     name: record.get("name"),
                     path: record.get("path"),
+                    kind: EntryKind::from(record.get::<&str, _>("kind")),
                 })
-                .collect::<Vec<File>>()
+                .collect::<Vec<EntryResponse>>()
         })
     })
     .join()
