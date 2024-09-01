@@ -8,9 +8,16 @@ import { useHotkeys, isHotkeyPressed } from "react-hotkeys-hook";
 function App() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listItemRefs = useRef<RefObject<HTMLLIElement>[]>([]);
-  const [result, setResult] = useState<[{ name: string; path: string }] | null>(
-    null,
-  );
+  const [result, setResult] = useState<
+    | [
+        {
+          name: string;
+          path: string;
+          kind: string;
+        },
+      ]
+    | null
+  >(null);
   const [query, setQuery] = useState<string>("");
   const [history, setHistory] = useState<string[]>([]);
   const [selectedHistory, setSelectedHistory] = useState<number | null>(null);
