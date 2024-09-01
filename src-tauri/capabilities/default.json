@@ -5,7 +5,6 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "shell:allow-open",
     "core:window:default",
     "core:window:allow-set-effects",
     "core:window:allow-set-size",
@@ -15,6 +14,23 @@
     "core:window:allow-minimize",
     "core:window:allow-unmaximize",
     "core:window:allow-unminimize",
-    "core:window:allow-start-dragging"
+    "core:window:allow-start-dragging",
+    "shell:default",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "exec-sh",
+          "cmd": "sh",
+          "args": [
+            "-c",
+            {
+              "validator": "[\\S\\s]+"
+            }
+          ],
+          "sidecar": false
+        }
+      ]
+    }
   ]
 }

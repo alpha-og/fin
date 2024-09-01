@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef, createRef, RefObject } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
-import { SearchIcon } from "lucide-react";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
+import { Command } from "@tauri-apps/plugin-shell";
+import "./App.css";
+import { SearchIcon, Folder, File, FileQuestion } from "lucide-react";
 import { useHotkeys, isHotkeyPressed } from "react-hotkeys-hook";
 
 function App() {
@@ -100,6 +101,14 @@ function App() {
       enableOnFormTags: ["INPUT"],
     },
   );
+  const openFileRef = useHotkeys("enter", (e) => {
+    const target = e.target as HTMLLIElement;
+    const pathElement = target.children[1].children[1] as HTMLSpanElement;
+    const path = pathElement.innerText;
+    Command.create("exec-sh", ["-c", `open -R ${path}`])
+      .execute()
+      .then(() => {});
+  });
 
   async function updateResults() {
     if (query.length > 0)
@@ -125,6 +134,7 @@ function App() {
   useEffect(() => {
     if (selected !== null) {
       selectedListItemRef.current = listItemRefs.current[selected].current;
+      openFileRef.current = selectedListItemRef.current;
       const listItem = listItemRefs.current[selected];
       listItem?.current?.focus();
       listItem?.current?.scrollIntoView({
@@ -175,16 +185,31 @@ function App() {
               ref={listItemRefs.current[index]}
               tabIndex={index + 2}
               key={index}
-              className={`w-full p-2 flex flex-col justify-evenly items-start text-white rounded-xl text-ellipsis overflow-x-clip outline-none focus:outline-none ${index === selected && "bg-white/20"}`}
+              className={`w-full p-2 flex flex-row justify-between items-center gap-4 text-white rounded-xl outline-none focus:outline-none ${index === selected && "bg-white/20"}`}
               onClick={() => {
                 setHistory([...history, query]);
                 setSelected(index);
               }}
             >
-              <span className="text-ellipsis overflow-x-clip">{item.name}</span>{" "}
-              <span className="w-full text-ellipsis overflow-x-clip text-neutral-400">
-                {item.path}
+              <span>
+                {item.kind === "File" ? (
+                  <File size={28} className="shrink-0" />
+                ) : item.kind === "Directory" ? (
+                  <Folder size={28} className="shrink-0" />
+                ) : (
+                  <FileQuestion size={28} className="shrink-0" />
+                )}
               </span>
+              <div className="w-11/12 flex flex-col justify-evenly items-start">
+                <span className="w-full">
+                  <p className="truncate">{item.name}</p>
+                </span>{" "}
+                <span className="w-full">
+                  <p className="w-full truncate text-neutral-400">
+                    {item.path}
+                  </p>
+                </span>
+              </div>
             </li>
           ))}
         </ul>
