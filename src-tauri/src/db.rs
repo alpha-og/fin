@@ -1,6 +1,7 @@
 use directories::BaseDirs;
 use dotenvy::dotenv;
 use sqlx::Row;
+use std::collections::HashMap;
 use std::env;
 use std::ops::Deref;
 use std::os::unix::fs::MetadataExt;
@@ -47,6 +48,7 @@ pub struct Entry {
 }
 pub struct Db {
     pub pool: Arc<Mutex<sqlx::SqlitePool>>,
+    pub cache_status: Arc<Mutex<HashMap<String, bool>>>,
 }
 
 impl Db {
@@ -57,6 +59,7 @@ impl Db {
             tauri::async_runtime::block_on(sqlx::SqlitePool::connect(&database_url)).unwrap();
         app.manage(Db {
             pool: Arc::new(Mutex::new(pool)),
+            cache_status: Arc::new(Mutex::new(HashMap::new())),
         });
         let db_state = app.state::<Db>();
         let pool_arc = Arc::clone(&db_state.pool);
@@ -67,8 +70,18 @@ impl Db {
         });
 
         let db_state = app.state::<Db>();
-        Db::cache_file_system(&db_state);
+        Self::update_cache_states(&db_state);
+
+        {
+            let cache_status = db_state.cache_status.lock().unwrap();
+            if let Some(cache_status) = cache_status.get("filesystem") {
+                if !cache_status {
+                    Db::cache_file_system(&db_state);
+                }
+            }
+        }
     }
+
     fn get_database_url(database_url: Option<String>) -> String {
         if let Some(database_url) = database_url {
             database_url
@@ -90,6 +103,23 @@ impl Db {
                 }
             }
         }
+    }
+
+    fn update_cache_states(db_state: &State<Db>) {
+        let pool_arc = Arc::clone(&db_state.pool);
+        let cache_status_arc = Arc::clone(&db_state.cache_status);
+        std::thread::spawn(move || {
+            let pool_state = pool_arc.lock().unwrap();
+            let pool = pool_state.deref();
+            let result = tauri::async_runtime::block_on(
+                sqlx::query("SELECT EXISTS (SELECT 1 FROM filesystem)").fetch_all(pool),
+            )
+            .unwrap();
+            if result.len() > 0 {
+                let mut cache_status_state = cache_status_arc.lock().unwrap();
+                cache_status_state.insert("filesystem".to_string(), true);
+            }
+        });
     }
 
     fn index_file_system() -> Vec<Entry> {
@@ -187,7 +217,7 @@ pub async fn get_files(
 
         tauri::async_runtime::block_on(async {
             let records = sqlx::query(
-                "SELECT * FROM filesystem WHERE name like $1 OR path like $2 ORDER BY atime DESC LIMIT 100",
+                "SELECT * FROM filesystem WHERE name LIKE $1 OR path LIKE $2 ORDER BY atime DESC LIMIT 100",
             )
             .bind(&filter)
             .bind(&filter)
@@ -206,5 +236,12 @@ pub async fn get_files(
     })
     .join()
     .unwrap();
+
+    // TODO: Add logic to re-index when no results are returned from search
+    // query ONLY if indexing is currently not in progress
+    //
+    // if files.len() == 0 {
+    //     Db::cache_file_system(&db_state);
+    // }
     Ok(files)
 }
