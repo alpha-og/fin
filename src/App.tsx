@@ -104,10 +104,15 @@ function App() {
   const openFileRef = useHotkeys("enter", (e) => {
     const target = e.target as HTMLLIElement;
     const pathElement = target.children[1].children[1] as HTMLSpanElement;
-    const path = pathElement.innerText;
-    Command.create("exec-sh", ["-c", `open -R ${path}`])
+    const path = pathElement.innerText
+      .trim()
+      .replace(/"/g, '\\"')
+      .replace(/'/g, "\\'");
+    Command.create("exec-sh", ["-c", `open -R "${path}"`])
       .execute()
-      .then(() => {});
+      .then((result) => {
+        console.log(result);
+      });
   });
 
   async function updateResults() {
