@@ -101,18 +101,23 @@ function App() {
       enableOnFormTags: ["INPUT"],
     },
   );
-  const openFileRef = useHotkeys("enter", (e) => {
-    const target = e.target as HTMLLIElement;
-    const pathElement = target.children[1].children[1] as HTMLSpanElement;
-    const path = pathElement.innerText
-      .trim()
-      .replace(/"/g, '\\"')
-      .replace(/'/g, "\\'");
-    Command.create("exec-sh", ["-c", `open -R "${path}"`])
-      .execute()
-      .then((result) => {
-        console.log(result);
-      });
+  const openFileRef = useHotkeys("enter", () => {
+    const selectedResult = result![selected!]!;
+    console.log(selectedResult);
+    if (selectedResult.kind === "Application") {
+      Command.create("exec-sh", ["-c", `open -n ${selectedResult.path}`])
+        .execute()
+        .then((result) => {
+          console.log("app");
+          console.log(result);
+        });
+    } else {
+      Command.create("exec-sh", ["-c", `open -R "${selectedResult.path}"`])
+        .execute()
+        .then((result) => {
+          console.log(result);
+        });
+    }
   });
 
   async function updateResults() {

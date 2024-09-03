@@ -14,6 +14,7 @@ pub enum EntryKind {
     File,
     Directory,
     Symlink,
+    Application,
 }
 
 impl From<&str> for EntryKind {
@@ -22,6 +23,7 @@ impl From<&str> for EntryKind {
             "file" => Self::File,
             "directory" => Self::Directory,
             "symlink" => Self::Symlink,
+            "application" => Self::Application,
             _ => panic!("Failed to parse file kind!"),
         }
     }
@@ -33,6 +35,7 @@ impl EntryKind {
             Self::File => "file",
             Self::Directory => "directory",
             Self::Symlink => "symlink",
+            Self::Application => "application",
         }
     }
 }
@@ -46,6 +49,7 @@ pub struct Entry {
     pub mtime: i64,
     pub atime: i64,
 }
+
 pub struct Db {
     pub pool: Arc<Mutex<sqlx::SqlitePool>>,
     pub cache_status: Arc<Mutex<HashMap<String, bool>>>,
@@ -55,8 +59,20 @@ impl Db {
     pub fn init(app: &mut tauri::App, database_url: Option<String>) {
         dotenv().ok();
         let database_url = Self::get_database_url(database_url);
+        if !std::path::Path::new(&database_url).exists() {
+            let path = std::path::Path::new(&database_url);
+            let prefix = path.parent().unwrap();
+            std::fs::create_dir_all(prefix).unwrap();
+            if let Ok(_file) = std::fs::File::create_new(path) {
+                dbg!("created file");
+            } else {
+                panic!("Unable to create file");
+            }
+        }
+        dbg!(&database_url);
         let pool =
             tauri::async_runtime::block_on(sqlx::SqlitePool::connect(&database_url)).unwrap();
+
         app.manage(Db {
             pool: Arc::new(Mutex::new(pool)),
             cache_status: Arc::new(Mutex::new(HashMap::new())),
@@ -66,7 +82,11 @@ impl Db {
         std::thread::spawn(move || {
             let pool_state = pool_arc.lock().unwrap();
             let pool = pool_state.deref();
-            tauri::async_runtime::block_on(sqlx::migrate!().run(pool)).unwrap();
+            if let Ok(()) = tauri::async_runtime::block_on(sqlx::migrate!().run(pool)) {
+                dbg!("Migrations completed");
+            } else {
+                dbg!("Migrations failed");
+            }
         });
 
         let db_state = app.state::<Db>();
@@ -76,9 +96,11 @@ impl Db {
             let cache_status = db_state.cache_status.lock().unwrap();
             if let Some(cache_status) = cache_status.get("filesystem") {
                 if !cache_status {
-                    Db::cache_file_system(&db_state);
+                    return;
                 }
             }
+
+            Db::cache_file_system(&db_state);
         }
     }
 
@@ -112,10 +134,12 @@ impl Db {
             let pool_state = pool_arc.lock().unwrap();
             let pool = pool_state.deref();
             let result = tauri::async_runtime::block_on(
-                sqlx::query("SELECT EXISTS (SELECT 1 FROM filesystem)").fetch_all(pool),
+                sqlx::query("SELECT EXISTS (SELECT 1 FROM filesystem LIMIT 1)").fetch_one(pool),
             )
-            .unwrap();
-            if result.len() > 0 {
+            .map(|row| row.get::<bool, _>(0))
+            .unwrap_or(false);
+            if result {
+                dbg!("File system cache exists");
                 let mut cache_status_state = cache_status_arc.lock().unwrap();
                 cache_status_state.insert("filesystem".to_string(), true);
             }
@@ -123,7 +147,7 @@ impl Db {
     }
 
     fn index_file_system() -> Vec<Entry> {
-        let mut files = Vec::new();
+        let mut entries = Vec::new();
         for entry in WalkDir::new(BaseDirs::new().unwrap().home_dir())
             .min_depth(1)
             .max_depth(5)
@@ -147,7 +171,7 @@ impl Db {
                 } else {
                     EntryKind::Symlink
                 };
-                files.push(Entry {
+                entries.push(Entry {
                     name: entry.file_name().to_string_lossy().to_string(),
                     path: entry.path().to_string_lossy().to_string(),
                     kind,
@@ -157,7 +181,37 @@ impl Db {
                 })
             }
         }
-        files
+        for entry in WalkDir::new("/Applications/")
+            .min_depth(1)
+            .max_depth(1)
+            .into_iter()
+            // .filter_entry(|entry| {
+            //     let file_name_substrings: Vec<String> = entry
+            //         .file_name()
+            //         .to_string_lossy()
+            //         .split(".")
+            //         .into_iter()
+            //         .map(|substring| substring.to_string())
+            //         .collect();
+            //     dbg!(&file_name_substrings);
+            //     file_name_substrings
+            //         .get(file_name_substrings.len() - 1)
+            //         .unwrap()
+            //         .contains("app")
+            // })
+            .filter_map(Result::ok)
+        {
+            let metadata = entry.metadata().unwrap();
+            entries.push(Entry {
+                name: entry.file_name().to_string_lossy().to_string(),
+                path: entry.path().to_string_lossy().to_string(),
+                kind: EntryKind::Application,
+                ctime: metadata.ctime(),
+                mtime: metadata.mtime(),
+                atime: metadata.atime(),
+            })
+        }
+        entries
     }
     fn cache_file_system(db_state: &State<Db>) {
         dbg!("Caching file system");
@@ -217,7 +271,7 @@ pub async fn get_files(
 
         tauri::async_runtime::block_on(async {
             let records = sqlx::query(
-                "SELECT * FROM filesystem WHERE name LIKE $1 OR path LIKE $2 ORDER BY atime DESC LIMIT 100",
+                "SELECT * FROM filesystem WHERE name LIKE $1 OR path LIKE $2 ORDER BY CASE WHEN kind = 'application' THEN 0 ELSE 1 END ,atime DESC LIMIT 100",
             )
             .bind(&filter)
             .bind(&filter)
