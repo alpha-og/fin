@@ -1,2 +1,2 @@
-DROP TABLE filesystem;  
+DROP TABLE IF EXISTS filesystem;  
 DROP INDEX IF EXISTS idx_path;
