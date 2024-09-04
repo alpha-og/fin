@@ -94,8 +94,10 @@ impl Db {
 
         {
             let cache_status = db_state.cache_status.lock().unwrap();
-            if let Some(cache_status) = cache_status.get("filesystem") {
-                if !cache_status {
+
+            dbg!(&cache_status);
+            if let Some(filesystem_cache_status) = cache_status.get("filesystem") {
+                if *filesystem_cache_status {
                     return;
                 }
             }
@@ -129,25 +131,28 @@ impl Db {
 
     fn update_cache_states(db_state: &State<Db>) {
         let pool_arc = Arc::clone(&db_state.pool);
-        let cache_status_arc = Arc::clone(&db_state.cache_status);
-        std::thread::spawn(move || {
-            let pool_state = pool_arc.lock().unwrap();
-            let pool = pool_state.deref();
-            let result = tauri::async_runtime::block_on(
-                sqlx::query("SELECT EXISTS (SELECT 1 FROM filesystem LIMIT 1)").fetch_one(pool),
-            )
-            .map(|row| row.get::<bool, _>(0))
-            .unwrap_or(false);
-            if result {
-                dbg!("File system cache exists");
-                let mut cache_status_state = cache_status_arc.lock().unwrap();
-                cache_status_state.insert("filesystem".to_string(), true);
-            }
-        });
+        // std::thread::spawn(move || {
+        let pool_state = pool_arc.lock().unwrap();
+        let pool = pool_state.deref();
+        let result = tauri::async_runtime::block_on(
+            sqlx::query("SELECT EXISTS (SELECT 1 FROM filesystem LIMIT 1)").fetch_one(pool),
+        )
+        .map(|row| row.get::<bool, _>(0))
+        .unwrap_or(false);
+        if result {
+            dbg!("File system cache exists");
+            let mut cache_status = db_state.cache_status.lock().unwrap();
+            cache_status.insert("filesystem".to_string(), true);
+        } else {
+            dbg!("File system cache does not exists");
+        }
+        // });
     }
 
     fn index_file_system() -> Vec<Entry> {
         let mut entries = Vec::new();
+
+        // index files
         for entry in WalkDir::new(BaseDirs::new().unwrap().home_dir())
             .min_depth(1)
             .max_depth(5)
@@ -181,24 +186,25 @@ impl Db {
                 })
             }
         }
+
+        // index all applications
         for entry in WalkDir::new("/Applications/")
             .min_depth(1)
             .max_depth(1)
             .into_iter()
-            // .filter_entry(|entry| {
-            //     let file_name_substrings: Vec<String> = entry
-            //         .file_name()
-            //         .to_string_lossy()
-            //         .split(".")
-            //         .into_iter()
-            //         .map(|substring| substring.to_string())
-            //         .collect();
-            //     dbg!(&file_name_substrings);
-            //     file_name_substrings
-            //         .get(file_name_substrings.len() - 1)
-            //         .unwrap()
-            //         .contains("app")
-            // })
+            .filter_entry(|entry| {
+                let file_name_substrings: Vec<String> = entry
+                    .file_name()
+                    .to_string_lossy()
+                    .split(".")
+                    .into_iter()
+                    .map(|substring| substring.to_string())
+                    .collect();
+                file_name_substrings
+                    .get(file_name_substrings.len() - 1)
+                    .unwrap()
+                    .contains("app")
+            })
             .filter_map(Result::ok)
         {
             let metadata = entry.metadata().unwrap();
