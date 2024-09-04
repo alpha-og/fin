@@ -1,4 +1,11 @@
-import { useEffect, useState, useRef, createRef, RefObject } from "react";
+import {
+  useEffect,
+  useState,
+  useRef,
+  createRef,
+  RefObject,
+  MutableRefObject,
+} from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { Command } from "@tauri-apps/plugin-shell";
@@ -24,7 +31,7 @@ function App() {
   const [selectedHistory, setSelectedHistory] = useState<number | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const currentWindow = getCurrentWindow();
-  const clearSearchRef = useHotkeys<HTMLInputElement>(
+  const clearSearchRef = useHotkeys(
     "escape, ctrl+[",
     (e) => {
       const target = e.target as HTMLInputElement;
@@ -38,7 +45,7 @@ function App() {
       preventDefault: true,
       enableOnFormTags: ["INPUT"],
     },
-  );
+  ) as unknown as MutableRefObject<HTMLInputElement>;
   const cycleHistoryRef = useHotkeys(
     "ctrl+p, ctrl+n",
     () => {
@@ -59,12 +66,12 @@ function App() {
       preventDefault: true,
       enableOnFormTags: ["INPUT"],
     },
-  );
+  ) as unknown as MutableRefObject<HTMLInputElement>;
 
   const selectedListItemRef = useHotkeys("escape, ctrl+[", () => {
     inputRef.current?.focus();
     setSelected(null);
-  });
+  }) as unknown as MutableRefObject<HTMLLIElement>;
 
   useHotkeys(
     "ArrowDown, ctrl+j",
@@ -105,10 +112,9 @@ function App() {
     const selectedResult = result![selected!]!;
     console.log(selectedResult);
     if (selectedResult.kind === "Application") {
-      Command.create("exec-sh", ["-c", `open -n ${selectedResult.path}`])
+      Command.create("exec-sh", ["-c", `open ${selectedResult.path}`])
         .execute()
         .then((result) => {
-          console.log("app");
           console.log(result);
         });
     } else {
@@ -118,7 +124,9 @@ function App() {
           console.log(result);
         });
     }
-  });
+    setSelected(null);
+    inputRef.current?.focus();
+  }) as unknown as MutableRefObject<HTMLLIElement>;
 
   async function updateResults() {
     if (query.length > 0)
@@ -127,8 +135,8 @@ function App() {
   }
 
   useEffect(() => {
-    clearSearchRef.current = inputRef.current;
-    cycleHistoryRef.current = inputRef.current;
+    clearSearchRef.current = inputRef.current!;
+    cycleHistoryRef.current = inputRef.current!;
   }, [inputRef]);
   useEffect(() => {
     if (result !== null && result.length > 0) {
@@ -143,7 +151,7 @@ function App() {
   }, [result]);
   useEffect(() => {
     if (selected !== null) {
-      selectedListItemRef.current = listItemRefs.current[selected].current;
+      selectedListItemRef.current = listItemRefs.current[selected].current!;
       openFileRef.current = selectedListItemRef.current;
       const listItem = listItemRefs.current[selected];
       listItem?.current?.focus();
