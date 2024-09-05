@@ -1,14 +1,13 @@
 use directories::BaseDirs;
-use dotenvy::dotenv;
+use dotenvy;
 use sqlx::Row;
 use std::collections::HashMap;
 use std::env;
-use std::ops::Deref;
 use std::os::unix::fs::MetadataExt;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
-use tauri::State;
 use walkdir::WalkDir;
+
 #[derive(serde::Serialize, Clone)]
 pub enum EntryKind {
     File,
@@ -51,59 +50,35 @@ pub struct Entry {
 }
 
 pub struct Db {
-    pub pool: Arc<Mutex<sqlx::SqlitePool>>,
+    pub pool: Arc<Mutex<Option<sqlx::SqlitePool>>>,
     pub cache_status: Arc<Mutex<HashMap<String, bool>>>,
 }
 
 impl Db {
     pub fn init(app: &mut tauri::App, database_url: Option<String>) {
-        dotenv().ok();
+        dotenvy::dotenv().ok();
         let database_url = Self::get_database_url(database_url);
-        if !std::path::Path::new(&database_url).exists() {
-            let path = std::path::Path::new(&database_url);
-            let prefix = path.parent().unwrap();
-            std::fs::create_dir_all(prefix).unwrap();
-            if let Ok(_file) = std::fs::File::create_new(path) {
-                dbg!("created file");
-            } else {
-                panic!("Unable to create file");
-            }
-        }
+        Self::create_cache_files(&database_url);
         dbg!(&database_url);
-        let pool =
-            tauri::async_runtime::block_on(sqlx::SqlitePool::connect(&database_url)).unwrap();
 
-        app.manage(Db {
-            pool: Arc::new(Mutex::new(pool)),
+        app.manage(Arc::new(Db {
+            pool: Arc::new(Mutex::new(None)),
             cache_status: Arc::new(Mutex::new(HashMap::new())),
-        });
-        let db_state = app.state::<Db>();
-        let pool_arc = Arc::clone(&db_state.pool);
-        std::thread::spawn(move || {
-            let pool_state = pool_arc.lock().unwrap();
-            let pool = pool_state.deref();
-            if let Ok(()) = tauri::async_runtime::block_on(sqlx::migrate!().run(pool)) {
-                dbg!("Migrations completed");
-            } else {
-                dbg!("Migrations failed");
-            }
-        });
+        }));
 
-        let db_state = app.state::<Db>();
-        Self::update_cache_states(&db_state);
-
-        {
-            let cache_status = db_state.cache_status.lock().unwrap();
-
-            dbg!(&cache_status);
-            if let Some(filesystem_cache_status) = cache_status.get("filesystem") {
-                if *filesystem_cache_status {
-                    return;
+        let db_state = Arc::clone(&app.state::<Arc<Db>>());
+        std::thread::spawn(|| {
+            tauri::async_runtime::block_on(async move {
+                let pool = sqlx::SqlitePool::connect(&database_url).await.unwrap();
+                {
+                    let mut pool_state = db_state.pool.lock().unwrap();
+                    *pool_state = Some(pool);
                 }
-            }
-
-            Db::cache_file_system(&db_state);
-        }
+                Self::run_migrations(&db_state.pool).await;
+                Self::update_cache_states(&db_state).await;
+                Self::cache_file_system(&db_state, false).await;
+            })
+        });
     }
 
     fn get_database_url(database_url: Option<String>) -> String {
@@ -128,17 +103,37 @@ impl Db {
             }
         }
     }
+    fn create_cache_files(database_url: &str) {
+        if !std::path::Path::new(database_url).exists() {
+            let path = std::path::Path::new(database_url);
+            let prefix = path.parent().unwrap();
+            std::fs::create_dir_all(prefix).unwrap();
+            if let Ok(_file) = std::fs::File::create_new(path) {
+                dbg!("created file");
+            } else {
+                panic!("Unable to create file");
+            }
+        }
+    }
 
-    fn update_cache_states(db_state: &State<Db>) {
-        let pool_arc = Arc::clone(&db_state.pool);
-        // std::thread::spawn(move || {
-        let pool_state = pool_arc.lock().unwrap();
-        let pool = pool_state.deref();
-        let result = tauri::async_runtime::block_on(
-            sqlx::query("SELECT EXISTS (SELECT 1 FROM filesystem LIMIT 1)").fetch_one(pool),
-        )
-        .map(|row| row.get::<bool, _>(0))
-        .unwrap_or(false);
+    async fn run_migrations(pool: &Arc<Mutex<Option<sqlx::SqlitePool>>>) {
+        let pool_state = pool.lock().unwrap();
+        let pool = pool_state.as_ref().unwrap();
+        if let Ok(()) = sqlx::migrate!().run(pool).await {
+            dbg!("Migrations completed");
+        } else {
+            dbg!("Migrations failed");
+        }
+    }
+
+    async fn update_cache_states(db_state: &Arc<Db>) {
+        let pool_state = db_state.pool.lock().unwrap();
+        let pool = pool_state.as_ref().unwrap();
+        let result = sqlx::query("SELECT EXISTS (SELECT 1 FROM filesystem LIMIT 1)")
+            .fetch_one(pool)
+            .await
+            .map(|row| row.get::<bool, _>(0))
+            .unwrap_or(false);
         if result {
             dbg!("File system cache exists");
             let mut cache_status = db_state.cache_status.lock().unwrap();
@@ -146,7 +141,20 @@ impl Db {
         } else {
             dbg!("File system cache does not exists");
         }
-        // });
+    }
+    fn check_cache_status(cache_status: &Arc<Mutex<HashMap<String, bool>>>) -> bool {
+        dbg!("test");
+        let cache_status = cache_status.lock().unwrap();
+        dbg!(&cache_status);
+        if let Some(filesystem_cache_status) = cache_status.get("filesystem") {
+            if *filesystem_cache_status {
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
     }
 
     fn index_file_system() -> Vec<Entry> {
@@ -219,40 +227,40 @@ impl Db {
         }
         entries
     }
-    fn cache_file_system(db_state: &State<Db>) {
+    async fn cache_file_system(db_state: &Arc<Db>, overwrite: bool) {
+        if !(overwrite || (!overwrite && !Self::check_cache_status(&db_state.cache_status))) {
+            return;
+        }
+
         dbg!("Caching file system");
-        let pool_arc = Arc::clone(&db_state.pool);
-        std::thread::spawn(move || {
-            let entries = Self::index_file_system();
-            let pool = pool_arc.lock().unwrap();
-            tauri::async_runtime::block_on(async {
-                let query = "INSERT OR REPLACE INTO filesystem (name, path, kind, ctime, mtime, atime) VALUES ($1, $2, $3, $4, $5, $6)";
-                dbg!("Creating transactions for file system index");
-                let mut tx = pool.begin().await.unwrap();
-                for Entry {
-                    name,
-                    path,
-                    kind,
-                    ctime,
-                    mtime,
-                    atime,
-                } in entries
-                {
-                    let _ = sqlx::query(query)
-                        .bind(&name)
-                        .bind(&path)
-                        .bind(kind.as_str())
-                        .bind(&ctime)
-                        .bind(&mtime)
-                        .bind(&atime)
-                        .execute(&mut *tx)
-                        .await;
-                }
-                dbg!("Committing transactions for file system index");
-                tx.commit().await.unwrap();
-                dbg!("Completed caching file system");
-            })
-        });
+        let pool_state = db_state.pool.lock().unwrap();
+        let entries = Self::index_file_system();
+        let pool = pool_state.as_ref().unwrap();
+        let query = "INSERT OR REPLACE INTO filesystem (name, path, kind, ctime, mtime, atime) VALUES ($1, $2, $3, $4, $5, $6)";
+        dbg!("Creating transactions for file system index");
+        let mut tx = pool.begin().await.unwrap();
+        for Entry {
+            name,
+            path,
+            kind,
+            ctime,
+            mtime,
+            atime,
+        } in entries
+        {
+            let _ = sqlx::query(query)
+                .bind(&name)
+                .bind(&path)
+                .bind(kind.as_str())
+                .bind(&ctime)
+                .bind(&mtime)
+                .bind(&atime)
+                .execute(&mut *tx)
+                .await;
+        }
+        dbg!("Committing transactions for file system index");
+        tx.commit().await.unwrap();
+        dbg!("Completed caching file system");
     }
 }
 
@@ -268,12 +276,12 @@ pub async fn get_files(
     app_handle: tauri::AppHandle,
     filter: String,
 ) -> Result<Vec<EntryResponse>, String> {
-    let db_state = app_handle.state::<Db>();
+    let db_state = app_handle.state::<Arc<Db>>();
     let pool_arc = Arc::clone(&db_state.pool);
     let filter = format!("%{filter}%");
     let files = std::thread::spawn(move || {
         let pool_state = pool_arc.lock().unwrap();
-        let pool = pool_state.deref();
+        let pool = pool_state.as_ref().unwrap();
 
         tauri::async_runtime::block_on(async {
             let records = sqlx::query(
