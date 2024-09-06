@@ -45,9 +45,6 @@ impl Db {
                 Self::run_migrations(&db_state.pool).await;
                 let mut cache_state = db_state.cache.lock().unwrap();
                 cache_state.init(&db_state).await;
-                dbg!("done");
-                // cache::Cache::update_cache_states(&db_state).await;
-                // cache::Cache::cache_file_system(&db_state, false).await;
             })
         });
     }
