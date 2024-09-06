@@ -84,7 +84,7 @@ impl Cache {
         self.update_cache_states(db).await;
         self.cache_file_system(db, false).await;
     }
-    async fn update_cache_states(&self, db_state: &Arc<db::Db>) {
+    async fn update_cache_states(&mut self, db_state: &Arc<db::Db>) {
         let pool_state = db_state.pool.lock().unwrap();
         let pool = pool_state.as_ref().unwrap();
         let result = sqlx::query("SELECT EXISTS (SELECT 1 FROM filesystem LIMIT 1)")
@@ -94,8 +94,7 @@ impl Cache {
             .unwrap_or(false);
         if result {
             dbg!("File system cache exists");
-            let mut cache_status = db_state.cache.lock().unwrap();
-            cache_status.filesystem.status = CacheStatus::Updated;
+            self.filesystem.status = CacheStatus::Updated;
         } else {
             dbg!("File system cache does not exists");
         }
