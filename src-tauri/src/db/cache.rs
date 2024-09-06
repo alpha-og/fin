@@ -1,7 +1,7 @@
 use crate::db::{self, BaseDirs};
 use sqlx::Row;
 use std::os::unix::fs::MetadataExt;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use walkdir::WalkDir;
 
 #[derive(serde::Serialize, Clone)]
@@ -65,7 +65,7 @@ pub struct CacheEntry {
 
 #[derive(Debug)]
 pub struct Cache {
-    filesystem: CacheEntry,
+    pub filesystem: CacheEntry,
 }
 
 impl Default for Cache {
@@ -80,23 +80,11 @@ impl Default for Cache {
 }
 
 impl Cache {
-    // pub fn init(&self, db: &Arc<db::Db>) {
-    //     Self::create_cache_files(&db.connection_url.unwrap());
-    //     self.update_cache_states(db);
-    // }
-    pub fn create_cache_files(database_url: &str) {
-        if !std::path::Path::new(database_url).exists() {
-            let path = std::path::Path::new(database_url);
-            let prefix = path.parent().unwrap();
-            std::fs::create_dir_all(prefix).unwrap();
-            if let Ok(_file) = std::fs::File::create_new(path) {
-                dbg!("created file");
-            } else {
-                panic!("Unable to create file");
-            }
-        }
+    pub async fn init(&mut self, db: &Arc<db::Db>) {
+        self.update_cache_states(db).await;
+        self.cache_file_system(db, false).await;
     }
-    pub async fn update_cache_states(db_state: &Arc<db::Db>) {
+    async fn update_cache_states(&self, db_state: &Arc<db::Db>) {
         let pool_state = db_state.pool.lock().unwrap();
         let pool = pool_state.as_ref().unwrap();
         let result = sqlx::query("SELECT EXISTS (SELECT 1 FROM filesystem LIMIT 1)")
@@ -112,10 +100,9 @@ impl Cache {
             dbg!("File system cache does not exists");
         }
     }
-    pub fn get_cache_status(cache: &Arc<Mutex<Cache>>) -> bool {
-        let cache = cache.lock().unwrap();
-        dbg!(&cache);
-        if let CacheStatus::Updated = cache.filesystem.status {
+    fn get_cache_status(&self) -> bool {
+        dbg!(&self);
+        if let CacheStatus::Updated = self.filesystem.status {
             true
         } else {
             false
@@ -191,11 +178,12 @@ impl Cache {
         }
         entries
     }
-    pub async fn cache_file_system(db_state: &Arc<db::Db>, overwrite: bool) {
-        if !(overwrite || (!overwrite && !Self::get_cache_status(&db_state.cache))) {
+    pub async fn cache_file_system(&mut self, db_state: &Arc<db::Db>, overwrite: bool) {
+        if !(overwrite || (!overwrite && !self.get_cache_status())) {
             return;
         }
 
+        self.filesystem.status = CacheStatus::Updating;
         dbg!("Caching file system");
         let pool_state = db_state.pool.lock().unwrap();
         let entries = Self::index_file_system();
@@ -224,6 +212,7 @@ impl Cache {
         }
         dbg!("Committing transactions for file system index");
         tx.commit().await.unwrap();
+        self.filesystem.status = CacheStatus::Updated;
         dbg!("Completed caching file system");
     }
 }

@@ -30,7 +30,8 @@ impl Db {
         app.manage(Arc::new(db));
 
         let db_state = Arc::clone(&app.state::<Arc<Db>>());
-        cache::Cache::create_cache_files(db_state.connection_url.as_deref().unwrap());
+
+        Self::create_db_files(db_state.connection_url.as_deref().unwrap());
         std::thread::spawn(|| {
             tauri::async_runtime::block_on(async move {
                 let pool = sqlx::SqlitePool::connect(db_state.connection_url.as_deref().unwrap())
@@ -42,8 +43,11 @@ impl Db {
                 }
 
                 Self::run_migrations(&db_state.pool).await;
-                cache::Cache::update_cache_states(&db_state).await;
-                cache::Cache::cache_file_system(&db_state, false).await;
+                let mut cache_state = db_state.cache.lock().unwrap();
+                cache_state.init(&db_state).await;
+                dbg!("done");
+                // cache::Cache::update_cache_states(&db_state).await;
+                // cache::Cache::cache_file_system(&db_state, false).await;
             })
         });
     }
@@ -65,6 +69,18 @@ impl Db {
                         Some(String::from("sqlite:cache.sqlite"))
                     }
                 }
+            }
+        }
+    }
+    fn create_db_files(database_url: &str) {
+        if !std::path::Path::new(database_url).exists() {
+            let path = std::path::Path::new(database_url);
+            let prefix = path.parent().unwrap();
+            std::fs::create_dir_all(prefix).unwrap();
+            if let Ok(_file) = std::fs::File::create_new(path) {
+                dbg!("created file");
+            } else {
+                panic!("Unable to create file");
             }
         }
     }
@@ -123,9 +139,12 @@ pub async fn get_files(
 
     // TODO: Add logic to re-index when no results are returned from search
     // query ONLY if indexing is currently not in progress
-    //
-    // if files.len() == 0 {
-    //     Db::cache_file_system(&db_state);
+    // let mut cache_state = db_state.cache.lock().unwrap();
+    // if let cache::CacheStatus::Updating = cache_state.filesystem.status {
+    // } else {
+    //     if files.len() == 0 {
+    //         cache_state.cache_file_system(&db_state, true);
+    //     }
     // }
     Ok(files)
 }
