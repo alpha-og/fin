@@ -133,15 +133,5 @@ pub async fn get_files(
     })
     .join()
     .unwrap();
-
-    // TODO: Add logic to re-index when no results are returned from search
-    // query ONLY if indexing is currently not in progress
-    // let mut cache_state = db_state.cache.lock().unwrap();
-    // if let cache::CacheStatus::Updating = cache_state.filesystem.status {
-    // } else {
-    //     if files.len() == 0 {
-    //         cache_state.cache_file_system(&db_state, true);
-    //     }
-    // }
     Ok(files)
 }
