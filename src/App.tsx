@@ -71,6 +71,7 @@ function App() {
   const selectedListItemRef = useHotkeys("escape, ctrl+[", () => {
     inputRef.current?.focus();
     setSelected(null);
+    setQuery("");
   }) as unknown as MutableRefObject<HTMLLIElement>;
 
   useHotkeys(
