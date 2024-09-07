@@ -1,4 +1,4 @@
-mod cache;
+pub mod fs;
 
 use directories::BaseDirs;
 use dotenvy;
@@ -9,44 +9,36 @@ use tauri::Manager;
 
 pub struct Db {
     pub connection_url: Option<String>,
-    pub pool: Arc<Mutex<Option<sqlx::SqlitePool>>>,
-    pub cache: Arc<Mutex<cache::Cache>>,
+    pub pool: Option<sqlx::SqlitePool>,
 }
 impl Default for Db {
     fn default() -> Self {
         Db {
             connection_url: None,
-            pool: Arc::new(Mutex::new(None)),
-            cache: Arc::new(Mutex::new(cache::Cache::default())),
+            pool: None,
         }
     }
 }
 
 impl Db {
-    pub fn init(app: &mut tauri::App, database_url: Option<String>) {
+    pub fn init(&mut self, database_url: Option<String>) {
         dotenvy::dotenv().ok();
-        let mut db = Self::default();
-        db.connection_url = Self::get_database_url(database_url);
-        app.manage(Arc::new(db));
+        self.connection_url = Self::get_database_url(database_url);
+        Self::create_db_files(&self.connection_url.as_ref().unwrap());
 
-        let db_state = Arc::clone(&app.state::<Arc<Db>>());
+        tauri::async_runtime::block_on(async move {
+            let pool = sqlx::SqlitePool::connect(&self.connection_url.as_ref().unwrap())
+                .await
+                .unwrap();
+            self.pool = Some(pool);
 
-        Self::create_db_files(db_state.connection_url.as_deref().unwrap());
-        std::thread::spawn(|| {
-            tauri::async_runtime::block_on(async move {
-                let pool = sqlx::SqlitePool::connect(db_state.connection_url.as_deref().unwrap())
-                    .await
-                    .unwrap();
-                {
-                    let mut pool_state = db_state.pool.lock().unwrap();
-                    *pool_state = Some(pool);
-                }
-
-                Self::run_migrations(&db_state.pool).await;
-                let mut cache_state = db_state.cache.lock().unwrap();
-                cache_state.init(&db_state).await;
-            })
-        });
+            Self::run_migrations(
+                self.pool
+                    .as_ref()
+                    .expect("SQLite connection pool should be Some"),
+            )
+            .await;
+        })
     }
 
     fn get_database_url(database_url: Option<String>) -> Option<String> {
@@ -82,9 +74,7 @@ impl Db {
         }
     }
 
-    async fn run_migrations(pool: &Arc<Mutex<Option<sqlx::SqlitePool>>>) {
-        let pool_state = pool.lock().unwrap();
-        let pool = pool_state.as_ref().unwrap();
+    async fn run_migrations(pool: &sqlx::SqlitePool) {
         if let Ok(()) = sqlx::migrate!().run(pool).await {
             dbg!("Migrations completed");
         } else {
@@ -97,7 +87,7 @@ impl Db {
 pub struct EntryResponse {
     pub name: String,
     pub path: String,
-    pub kind: cache::EntryKind,
+    pub kind: fs::EntryKind,
 }
 
 #[tauri::command]
@@ -105,12 +95,11 @@ pub async fn get_files(
     app_handle: tauri::AppHandle,
     filter: String,
 ) -> Result<Vec<EntryResponse>, String> {
-    let db_state = app_handle.state::<Arc<Db>>();
-    let pool_arc = Arc::clone(&db_state.pool);
+    let db_state = app_handle.state::<Arc<Mutex<Db>>>();
+    let db_arc = Arc::clone(&db_state);
     let filter = format!("%{filter}%");
     let files = std::thread::spawn(move || {
-        let pool_state = pool_arc.lock().unwrap();
-        let pool = pool_state.as_ref().unwrap();
+        let db = db_arc.lock().expect("Thread should not be poisoned to access db state");
 
         tauri::async_runtime::block_on(async {
             let records = sqlx::query(
@@ -118,7 +107,7 @@ pub async fn get_files(
             )
             .bind(&filter)
             .bind(&filter)
-            .fetch_all(pool)
+            .fetch_all(db.pool.as_ref().expect("SQLite connection pool must be Some not None to query database"))
             .await
             .unwrap();
             records
@@ -126,7 +115,7 @@ pub async fn get_files(
                 .map(|record| EntryResponse {
                     name: record.get("name"),
                     path: record.get("path"),
-                    kind: cache::EntryKind::from(record.get::<&str, _>("kind")),
+                    kind: fs::EntryKind::from(record.get::<&str, _>("kind")),
                 })
                 .collect::<Vec<EntryResponse>>()
         })
