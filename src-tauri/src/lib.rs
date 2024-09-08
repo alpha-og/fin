@@ -1,18 +1,28 @@
-use std::sync::{Arc, Mutex};
-
-use tauri::Manager;
-
 mod cache;
+mod config;
 mod db;
 mod keymaps;
 
+use std::sync::{Arc, Mutex};
+use tauri::Manager;
+
 fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    app.manage(Arc::new(Mutex::new(config::Config::default())));
+    app.manage(Arc::new(Mutex::new(db::Db::default())));
+    app.manage(Arc::new(Mutex::new(cache::Cache::default())));
+
     #[cfg(desktop)]
     {
         keymaps::init(app);
         #[cfg(target_os = "macos")]
         app.set_activation_policy(tauri::ActivationPolicy::Accessory);
     }
+    let config_state = app.state::<Arc<Mutex<config::Config>>>();
+    {
+        let mut config = config_state.lock().expect("Thread should not be poisoned");
+        config.init();
+    }
+
     let db_state = app.state::<Arc<Mutex<db::Db>>>();
     {
         let db_arc = Arc::clone(&db_state);
@@ -26,6 +36,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             ));
         });
     }
+
     let cache_state = app.state::<Arc<Mutex<cache::Cache>>>();
     let cache_arc = Arc::clone(&cache_state);
     {
@@ -62,8 +73,6 @@ fn handle_run_events(_app_handle: &tauri::AppHandle, _event: tauri::RunEvent) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .manage(Arc::new(Mutex::new(db::Db::default())))
-        .manage(Arc::new(Mutex::new(cache::Cache::default())))
         .on_window_event(handle_window_events)
         .plugin(tauri_plugin_shell::init())
         .setup(setup)
