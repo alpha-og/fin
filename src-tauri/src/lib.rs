@@ -18,22 +18,27 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         app.set_activation_policy(tauri::ActivationPolicy::Accessory);
     }
     let config_state = app.state::<Arc<Mutex<config::Config>>>();
-    {
-        let mut config = config_state.lock().expect("Thread should not be poisoned");
-        config.init();
+    loop {
+        let config_guard = config_state.try_lock();
+        if config_guard.is_ok() {
+            let mut config = config_guard.expect("Thread should not be poisoned");
+            config.init();
+            break;
+        }
     }
 
     let db_state = app.state::<Arc<Mutex<db::Db>>>();
     {
         let db_arc = Arc::clone(&db_state);
-        std::thread::spawn(move || {
-            let mut db = db_arc
-                .lock()
-                .expect("Thread poisoned, db state cannot be accessed");
-
-            db.init(Some(
-                "/Users/athulanoop/.config/fin/cache.sqlite".to_string(),
-            ));
+        std::thread::spawn(move || loop {
+            let db_guard = db_arc.try_lock();
+            if db_guard.is_ok() {
+                let mut db = db_guard.expect("Thread should not be poisoned");
+                db.init(Some(
+                    "/Users/athulanoop/.config/fin/cache.sqlite".to_string(),
+                ));
+                break;
+            }
         });
     }
 
@@ -41,15 +46,16 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let cache_arc = Arc::clone(&cache_state);
     {
         let db_arc = Arc::clone(&db_state);
-        std::thread::spawn(move || {
-            let db = db_arc
-                .lock()
-                .expect("Thread poisoned, db state cannot be accessed");
+        std::thread::spawn(move || loop {
+            let db_guard = db_arc.try_lock();
 
-            let mut cache = cache_arc
-                .lock()
-                .expect("Thread poisoned, cache state cannot be accessed");
-            tauri::async_runtime::block_on(cache.init(&db));
+            let cache_guard = cache_arc.try_lock();
+            if db_guard.is_ok() && cache_guard.is_ok() {
+                let mut cache = cache_guard.expect("Thread should not be poisoned");
+                let db = db_guard.expect("Thread should not be poisoned");
+                tauri::async_runtime::block_on(cache.init(&db));
+                break;
+            }
         });
     }
     Ok(())

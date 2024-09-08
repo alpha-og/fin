@@ -98,27 +98,29 @@ pub async fn get_files(
     let db_state = app_handle.state::<Arc<Mutex<Db>>>();
     let db_arc = Arc::clone(&db_state);
     let filter = format!("%{filter}%");
-    let files = std::thread::spawn(move || {
-        let db = db_arc.lock().expect("Thread should not be poisoned to access db state");
-
-        tauri::async_runtime::block_on(async {
-            let records = sqlx::query(
-                "SELECT * FROM filesystem WHERE name LIKE $1 OR path LIKE $2 ORDER BY CASE WHEN kind = 'application' THEN 0 ELSE 1 END ,atime DESC LIMIT 100",
-            )
-            .bind(&filter)
-            .bind(&filter)
-            .fetch_all(db.pool.as_ref().expect("SQLite connection pool must be Some not None to query database"))
-            .await
-            .unwrap();
-            records
-                .iter()
-                .map(|record| EntryResponse {
-                    name: record.get("name"),
-                    path: record.get("path"),
-                    kind: fs::EntryKind::from(record.get::<&str, _>("kind")),
-                })
-                .collect::<Vec<EntryResponse>>()
-        })
+    let files = std::thread::spawn(move || loop{
+        let db_guard = db_arc.try_lock();
+        if db_guard.is_ok(){
+            let db = db_guard.expect("Thread should not be poisoned");
+            return tauri::async_runtime::block_on(async {
+                let records = sqlx::query(
+                    "SELECT * FROM filesystem WHERE name LIKE $1 OR path LIKE $2 ORDER BY CASE WHEN kind = 'application' THEN 0 ELSE 1 END ,atime DESC LIMIT 100",
+                )
+                .bind(&filter)
+                .bind(&filter)
+                .fetch_all(db.pool.as_ref().expect("SQLite connection pool must be Some not None to query database"))
+                .await
+                .unwrap();
+                return records
+                    .iter()
+                    .map(|record| EntryResponse {
+                        name: record.get("name"),
+                        path: record.get("path"),
+                        kind: fs::EntryKind::from(record.get::<&str, _>("kind")),
+                    })
+                    .collect::<Vec<EntryResponse>>();
+            });
+        };
     })
     .join()
     .unwrap();
