@@ -1,7 +1,6 @@
 mod cache;
 mod config;
 mod db;
-mod keymaps;
 
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
@@ -11,18 +10,15 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(Arc::new(Mutex::new(db::Db::default())));
     app.manage(Arc::new(Mutex::new(cache::Cache::default())));
 
-    #[cfg(desktop)]
-    {
-        keymaps::init(app);
-        #[cfg(target_os = "macos")]
-        app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-    }
+    #[cfg(target_os = "macos")]
+    app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
     let config_state = app.state::<Arc<Mutex<config::Config>>>();
     loop {
         let config_guard = config_state.try_lock();
         if config_guard.is_ok() {
             let mut config = config_guard.expect("Thread should not be poisoned");
-            config.init();
+            config.init(app);
             break;
         }
     }

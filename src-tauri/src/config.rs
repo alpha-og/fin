@@ -1,6 +1,7 @@
-use std::{collections::HashMap, path::PathBuf, str::FromStr};
+mod keymaps;
 
 use directories::BaseDirs;
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
 use toml;
 
 #[derive(serde::Serialize, Debug)]
@@ -21,8 +22,9 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn init(&mut self) {
+    pub fn init(&mut self, app: &tauri::App) {
         self.load_config();
+        keymaps::init(app);
         dbg!(self);
     }
     fn set_source(&mut self) {

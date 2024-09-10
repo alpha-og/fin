@@ -1,7 +1,15 @@
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+// pub struct KeyBinding {
+//     description: String,
+//     modifiers: Modifiers,
+//     code: Code,
+// }
+// pub struct KeyBindings {
+//
+// }
 
-pub fn init(app: &mut tauri::App) {
+pub fn init(app: &tauri::App) {
     let global_shortcut = Shortcut::new(Some(Modifiers::ALT.union(Modifiers::SHIFT)), Code::Space);
     app.handle()
         .plugin(
