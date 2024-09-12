@@ -151,6 +151,5 @@ fn convert_infix_to_postfix<T: std::convert::From<i32> + std::fmt::Debug>(tokens
 #[tauri::command]
 pub fn calculate(input: String) {
     let tokens = tokenize(&input);
-    dbg!(&tokens);
     convert_infix_to_postfix(tokens);
 }
