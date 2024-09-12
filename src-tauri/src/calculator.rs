@@ -1,3 +1,5 @@
+use std::ops::{Add, Div, Mul, Sub};
+
 use regex::Regex;
 
 #[derive(Debug, Clone, Copy)]
@@ -13,7 +15,7 @@ enum Operator {
     None,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum Operand<T> {
     Number(T),
     None,
@@ -23,6 +25,7 @@ enum Operand<T> {
 enum Token<T> {
     Operand(Operand<T>),
     Operator(Operator),
+    None,
 }
 
 impl From<&str> for Operator {
@@ -69,7 +72,7 @@ impl From<&str> for Token<i32> {
         } else {
             let operator = Operator::from(token_string);
             if let Operator::None = operator {
-                panic!("Invalid token")
+                Self::None
             } else {
                 Self::Operator(operator)
             }
@@ -89,7 +92,7 @@ fn tokenize(expression: &str) -> Vec<Token<i32>> {
         })
         .collect()
 }
-fn convert_infix_to_postfix<T: std::convert::From<i32> + std::fmt::Debug>(tokens: Vec<Token<T>>) {
+fn convert_infix_to_postfix<T: std::convert::From<i32>>(tokens: Vec<Token<T>>) -> Vec<Token<T>> {
     let mut postfix_expression: Vec<Token<T>> = Vec::new();
     let mut operator_stack: Vec<Operator> = Vec::new();
     for token in tokens {
@@ -135,6 +138,7 @@ fn convert_infix_to_postfix<T: std::convert::From<i32> + std::fmt::Debug>(tokens
                     }
                 };
             }
+            _ => {}
         }
     }
 
@@ -146,10 +150,53 @@ fn convert_infix_to_postfix<T: std::convert::From<i32> + std::fmt::Debug>(tokens
             break;
         }
     }
+    postfix_expression
+}
+
+fn evaluate_postfix_expression<T>(postfix_expression: Vec<Token<T>>)
+where
+    T: std::convert::From<i32>
+        + Mul<T, Output = T>
+        + Add<T, Output = T>
+        + Div<T, Output = T>
+        + Sub<T, Output = T>
+        + std::fmt::Debug
+        + Clone,
+{
+    let mut result: Vec<Operand<T>> = Vec::new();
+    for token in postfix_expression {
+        match token {
+            Token::Operand(operand) => result.push(operand.clone()),
+            Token::Operator(operator) => {
+                let mut value_b: T = 0.into();
+                if let Some(Operand::Number(value)) = result.pop() {
+                    value_b = value
+                } else {
+                    break;
+                };
+                let mut value_a: T = 0.into();
+                if let Some(Operand::Number(value)) = result.pop() {
+                    value_a = value
+                } else {
+                    break;
+                };
+
+                match operator {
+                    Operator::Multiplication => result.push(Operand::Number(value_a * value_b)),
+                    Operator::Addition => result.push(Operand::Number(value_a + value_b)),
+                    Operator::Division => result.push(Operand::Number(value_a / value_b)),
+                    Operator::Subtraction => result.push(Operand::Number(value_a - value_b)),
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 #[tauri::command]
 pub fn calculate(input: String) {
     let tokens = tokenize(&input);
-    convert_infix_to_postfix(tokens);
+    let postfix = convert_infix_to_postfix(tokens);
+    evaluate_postfix_expression(postfix);
 }
