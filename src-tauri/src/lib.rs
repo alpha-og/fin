@@ -1,4 +1,5 @@
 mod cache;
+mod calculator;
 mod config;
 mod db;
 
@@ -78,7 +79,10 @@ pub fn run() {
         .on_window_event(handle_window_events)
         .plugin(tauri_plugin_shell::init())
         .setup(setup)
-        .invoke_handler(tauri::generate_handler![db::get_files])
+        .invoke_handler(tauri::generate_handler![
+            db::get_files,
+            calculator::calculate
+        ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(handle_run_events)
