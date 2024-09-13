@@ -83,18 +83,7 @@ impl Db {
     }
 }
 
-#[derive(serde::Serialize, Clone)]
-pub struct EntryResponse {
-    pub name: String,
-    pub path: String,
-    pub kind: fs::EntryKind,
-}
-
-#[tauri::command]
-pub async fn get_files(
-    app_handle: tauri::AppHandle,
-    filter: String,
-) -> Result<Vec<EntryResponse>, String> {
+pub fn get_files(app_handle: tauri::AppHandle, filter: &String) -> Result<Vec<fs::Entry>, String> {
     let db_state = app_handle.state::<Arc<Mutex<Db>>>();
     let db_arc = Arc::clone(&db_state);
     let filter = format!("%{filter}%");
@@ -113,12 +102,15 @@ pub async fn get_files(
                 .unwrap();
                 return records
                     .iter()
-                    .map(|record| EntryResponse {
+                    .map(|record| fs::Entry{
                         name: record.get("name"),
                         path: record.get("path"),
                         kind: fs::EntryKind::from(record.get::<&str, _>("kind")),
+                        ctime: record.get("ctime"),
+                        mtime: record.get("mtime"),
+                        atime: record.get("atime"),
                     })
-                    .collect::<Vec<EntryResponse>>();
+                    .collect::<Vec<fs::Entry>>();
             });
         };
     })
