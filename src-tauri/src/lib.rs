@@ -79,11 +79,22 @@ pub fn run() {
         .on_window_event(handle_window_events)
         .plugin(tauri_plugin_shell::init())
         .setup(setup)
-        .invoke_handler(tauri::generate_handler![
-            db::get_files,
-            calculator::calculate
-        ])
+        .invoke_handler(tauri::generate_handler![query])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(handle_run_events)
+}
+#[derive(serde::Serialize, Clone)]
+struct QueryResponse {
+    calculation: Result<f64, String>,
+    fs_entries: Result<Vec<db::fs::Entry>, String>,
+}
+#[tauri::command]
+fn query(app_handle: tauri::AppHandle, query: String) -> Result<QueryResponse, String> {
+    let calculation = calculator::calculate(&query);
+    let fs_entries = db::get_files(app_handle, &query);
+    Ok(QueryResponse {
+        calculation,
+        fs_entries,
+    })
 }
