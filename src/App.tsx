@@ -10,22 +10,36 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { Command } from "@tauri-apps/plugin-shell";
 import "./App.css";
-import { SearchIcon, Folder, File, FileQuestion } from "lucide-react";
+import { SearchIcon, Folder, File, FileQuestion, Copy } from "lucide-react";
 import { useHotkeys, isHotkeyPressed } from "react-hotkeys-hook";
+type T_FsEntry = {
+  name: string;
+  path: string;
+  kind: string;
+  ctime: number;
+  mtime: number;
+  atime: number;
+};
+
+type T_Response<T> = {
+  Ok?: T;
+  Err?: string;
+};
+
+type T_QueryResponse<T> = {
+  fs_entries: T_Response<T>;
+  calculation: T_Response<number>;
+};
+
+type T_Result = {
+  fsEntry?: T_FsEntry;
+  calculation?: number;
+};
 
 function App() {
   const inputRef = useRef<HTMLInputElement>(null);
   const listItemRefs = useRef<RefObject<HTMLLIElement>[]>([]);
-  const [result, setResult] = useState<
-    | [
-        {
-          name: string;
-          path: string;
-          kind: string;
-        },
-      ]
-    | null
-  >(null);
+  const [result, setResult] = useState<T_Result[] | null>(null);
   const [query, setQuery] = useState<string>("");
   const [history, setHistory] = useState<string[]>([]);
   const [selectedHistory, setSelectedHistory] = useState<number | null>(null);
@@ -109,30 +123,54 @@ function App() {
       enableOnFormTags: ["INPUT"],
     },
   );
-  const openFileRef = useHotkeys("enter", () => {
+  const actionRef = useHotkeys("enter", async () => {
     const selectedResult = result![selected!]!;
-    console.log(selectedResult);
-    if (selectedResult.kind === "Application") {
-      Command.create("exec-sh", ["-c", `open ${selectedResult.path}`])
-        .execute()
-        .then((result) => {
-          console.log(result);
-        });
-    } else {
-      Command.create("exec-sh", ["-c", `open -R "${selectedResult.path}"`])
-        .execute()
-        .then((result) => {
-          console.log(result);
-        });
+    if (selectedResult.fsEntry) {
+      if (selectedResult.fsEntry.kind === "Application") {
+        Command.create("exec-sh", ["-c", `open ${selectedResult.fsEntry.path}`])
+          .execute()
+          .then((result) => {
+            console.log(result);
+          });
+      } else {
+        Command.create("exec-sh", [
+          "-c",
+          `open -R "${selectedResult.fsEntry.path}"`,
+        ])
+          .execute()
+          .then((result) => {
+            console.log(result);
+          });
+      }
+    } else if (selectedResult.calculation) {
+      await navigator.clipboard.writeText(
+        selectedResult.calculation?.toString() || "",
+      );
     }
     setSelected(null);
     inputRef.current?.focus();
   }) as unknown as MutableRefObject<HTMLLIElement>;
 
   async function updateResults() {
-    if (query.length > 0)
-      setResult(await invoke("get_files", { filter: query }));
-    else setResult(null);
+    if (query.length > 0) {
+      const response = (await invoke("query", {
+        query,
+      })) as T_QueryResponse<T_FsEntry[]>;
+      let result: T_Result[] = [];
+      if (response.calculation.Ok) {
+        result.push({ calculation: response.calculation.Ok });
+      }
+
+      if (response.fs_entries.Ok) {
+        result = [
+          ...result,
+          ...response.fs_entries.Ok.map((item) => ({
+            fsEntry: item,
+          })),
+        ];
+      }
+      setResult(result);
+    } else setResult(null);
   }
 
   useEffect(() => {
@@ -153,7 +191,7 @@ function App() {
   useEffect(() => {
     if (selected !== null) {
       selectedListItemRef.current = listItemRefs.current[selected].current!;
-      openFileRef.current = selectedListItemRef.current;
+      actionRef.current = selectedListItemRef.current;
       const listItem = listItemRefs.current[selected];
       listItem?.current?.focus();
       listItem?.current?.scrollIntoView({
@@ -210,25 +248,41 @@ function App() {
                 setSelected(index);
               }}
             >
-              <span>
-                {item.kind === "File" ? (
-                  <File size={28} className="shrink-0" />
-                ) : item.kind === "Directory" ? (
-                  <Folder size={28} className="shrink-0" />
-                ) : (
-                  <FileQuestion size={28} className="shrink-0" />
-                )}
-              </span>
-              <div className="w-11/12 flex flex-col justify-evenly items-start">
-                <span className="w-full">
-                  <p className="truncate">{item.name}</p>
-                </span>{" "}
-                <span className="w-full">
-                  <p className="w-full truncate text-neutral-400">
-                    {item.path}
-                  </p>
-                </span>
-              </div>
+              {item.calculation && (
+                <>
+                  <div className="w-full">
+                    <p className="w-full truncate text-neutral-400">
+                      = {item.calculation.toString()}
+                    </p>
+                  </div>
+                  <span className="rounded-lg p-1 flex flex-row items-center justify-center hover:bg-white/10 hover:cursor-pointer">
+                    <Copy size={28} className="shrink-0" />
+                  </span>
+                </>
+              )}
+              {item.fsEntry && (
+                <>
+                  <span>
+                    {item.fsEntry.kind === "File" ? (
+                      <File size={28} className="shrink-0" />
+                    ) : item.fsEntry.kind === "Directory" ? (
+                      <Folder size={28} className="shrink-0" />
+                    ) : (
+                      <FileQuestion size={28} className="shrink-0" />
+                    )}
+                  </span>
+                  <div className="w-11/12 flex flex-col justify-evenly items-start">
+                    <span className="w-full">
+                      <p className="truncate">{item.fsEntry.name}</p>
+                    </span>{" "}
+                    <span className="w-full">
+                      <p className="w-full truncate text-neutral-400">
+                        {item.fsEntry.path}
+                      </p>
+                    </span>
+                  </div>
+                </>
+              )}
             </li>
           ))}
         </ul>
