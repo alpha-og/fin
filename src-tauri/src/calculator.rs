@@ -107,10 +107,10 @@ where
                     Operator::OpenParanthesis | Operator::OpenBrace => {
                         operator_stack.push(operator.clone())
                     }
-                    Operator::CloseParanthesis | Operator::CloseBrace => loop {
+                    Operator::CloseParanthesis => loop {
                         if let Some(operator_stack_top) = operator_stack.last() {
                             match operator_stack_top {
-                                Operator::OpenParanthesis | Operator::OpenBrace => {
+                                Operator::OpenParanthesis => {
                                     operator_stack.pop();
                                     break;
                                 }
@@ -124,6 +124,24 @@ where
                             break;
                         }
                     },
+                    Operator::CloseBrace => loop {
+                        if let Some(operator_stack_top) = operator_stack.last() {
+                            match operator_stack_top {
+                                Operator::OpenBrace => {
+                                    operator_stack.pop();
+                                    break;
+                                }
+                                _ => postfix_expression.push(Token::Operator(
+                                    operator_stack
+                                        .pop()
+                                        .expect("Vector stack should be non-empty"),
+                                )),
+                            }
+                        } else {
+                            break;
+                        }
+                    },
+
                     _ => {
                         loop {
                             if let Some(operator_stack_top) = operator_stack.last() {
