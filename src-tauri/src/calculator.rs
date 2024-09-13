@@ -81,7 +81,7 @@ impl From<&str> for Token<f64> {
     }
 }
 fn tokenize(expression: &str) -> Vec<Token<f64>> {
-    let pattern = Regex::new(r"(\d+)|([\+|\-|\*|/]{1,2})|([\(|\)|\{|\}])").unwrap();
+    let pattern = Regex::new(r"(\d+(?:\.\d+)?)|([\+|\-|\*|/]{1,2})|([\(|\)|\{|\}])").unwrap();
     pattern
         .captures_iter(expression)
         .map(|capture| {
