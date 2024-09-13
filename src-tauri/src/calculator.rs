@@ -1,5 +1,3 @@
-use std::ops::{Add, Div, Mul, Sub};
-
 use regex::Regex;
 
 #[derive(Debug, Clone, Copy)]
@@ -8,6 +6,7 @@ enum Operator {
     Subtraction,
     Multiplication,
     Division,
+    Exponent,
     OpenParanthesis,
     CloseParanthesis,
     OpenBrace,
@@ -16,13 +15,13 @@ enum Operator {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum Operand<T> {
+enum Operand<T: num_traits::Num + std::fmt::Debug + Clone> {
     Number(T),
     None,
 }
 
 #[derive(Debug)]
-enum Token<T> {
+enum Token<T: num_traits::Num + std::fmt::Debug + Clone> {
     Operand(Operand<T>),
     Operator(Operator),
     None,
@@ -35,6 +34,7 @@ impl From<&str> for Operator {
             "-" => Self::Subtraction,
             "*" => Self::Multiplication,
             "/" => Self::Division,
+            "**" => Self::Exponent,
             "(" => Self::OpenParanthesis,
             ")" => Self::CloseParanthesis,
             "{" => Self::OpenBrace,
@@ -51,20 +51,21 @@ impl Operator {
             Self::Subtraction => 1,
             Self::Multiplication => 2,
             Self::Division => 2,
+            Self::Exponent => 3,
             _ => 0,
         }
     }
 }
 
-impl From<&str> for Operand<i32> {
+impl From<&str> for Operand<f64> {
     fn from(operand: &str) -> Self {
         operand
-            .parse::<i32>()
+            .parse::<f64>()
             .map_or(Operand::None, |operand| Operand::Number(operand))
     }
 }
 
-impl From<&str> for Token<i32> {
+impl From<&str> for Token<f64> {
     fn from(token_string: &str) -> Self {
         let operand = Operand::from(token_string);
         if let Operand::Number(_) = operand {
@@ -79,7 +80,7 @@ impl From<&str> for Token<i32> {
         }
     }
 }
-fn tokenize(expression: &str) -> Vec<Token<i32>> {
+fn tokenize(expression: &str) -> Vec<Token<f64>> {
     let pattern = Regex::new(r"(\d+)|([\+|\-|\*|/]{1,2})|([\(|\)|\{|\}])").unwrap();
     pattern
         .captures_iter(expression)
@@ -92,7 +93,10 @@ fn tokenize(expression: &str) -> Vec<Token<i32>> {
         })
         .collect()
 }
-fn convert_infix_to_postfix<T: std::convert::From<i32>>(tokens: Vec<Token<T>>) -> Vec<Token<T>> {
+fn convert_infix_to_postfix<T>(tokens: Vec<Token<T>>) -> Vec<Token<T>>
+where
+    T: num_traits::Num + std::fmt::Debug + Clone,
+{
     let mut postfix_expression: Vec<Token<T>> = Vec::new();
     let mut operator_stack: Vec<Operator> = Vec::new();
     for token in tokens {
@@ -152,29 +156,26 @@ fn convert_infix_to_postfix<T: std::convert::From<i32>>(tokens: Vec<Token<T>>) -
     }
     postfix_expression
 }
-
-fn evaluate_postfix_expression<T>(postfix_expression: Vec<Token<T>>)
+fn evaluate_postfix_expression<T>(postfix_expression: Vec<Token<T>>) -> Result<T, String>
 where
-    T: std::convert::From<i32>
-        + Mul<T, Output = T>
-        + Add<T, Output = T>
-        + Div<T, Output = T>
-        + Sub<T, Output = T>
+    T: num_traits::Num
         + std::fmt::Debug
-        + Clone,
+        + Clone
+        + std::convert::From<f64>
+        + num_traits::Pow<T, Output = T>,
 {
     let mut result: Vec<Operand<T>> = Vec::new();
     for token in postfix_expression {
         match token {
             Token::Operand(operand) => result.push(operand.clone()),
             Token::Operator(operator) => {
-                let mut value_b: T = 0.into();
+                let mut value_b: T = 0.0.into();
                 if let Some(Operand::Number(value)) = result.pop() {
                     value_b = value
                 } else {
                     break;
                 };
-                let mut value_a: T = 0.into();
+                let mut value_a: T = 0.0.into();
                 if let Some(Operand::Number(value)) = result.pop() {
                     value_a = value
                 } else {
@@ -186,17 +187,24 @@ where
                     Operator::Addition => result.push(Operand::Number(value_a + value_b)),
                     Operator::Division => result.push(Operand::Number(value_a / value_b)),
                     Operator::Subtraction => result.push(Operand::Number(value_a - value_b)),
+                    Operator::Exponent => {
+                        result.push(Operand::Number(value_a.pow(value_b)));
+                    }
                     _ => {}
                 }
             }
             _ => {}
         }
     }
+    if let Some(Operand::Number(value)) = result.get(0) {
+        Ok(value.clone())
+    } else {
+        Err("Unable to compute result".to_string())
+    }
 }
 
-#[tauri::command]
-pub fn calculate(input: String) {
-    let tokens = tokenize(&input);
+pub fn calculate(input: &String) -> Result<f64, String> {
+    let tokens = tokenize(input);
     let postfix = convert_infix_to_postfix(tokens);
-    evaluate_postfix_expression(postfix);
+    evaluate_postfix_expression(postfix)
 }
