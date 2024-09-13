@@ -25,6 +25,7 @@ directories = "5.0.1"
 sqlx = { version = "0.8.1", features = ["sqlite", "runtime-tokio", "tls-native-tls", "macros"] }
 toml = "0.8.9"
 regex = "1.9.6"
+num-traits = "0.2.9"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2.0.0-rc.1"

@@ -886,6 +886,7 @@ version = "0.0.1"
 dependencies = [
  "directories",
  "dotenvy",
+ "num-traits",
  "regex",
  "serde",
  "serde_json",
