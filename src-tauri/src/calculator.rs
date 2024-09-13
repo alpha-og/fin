@@ -127,6 +127,11 @@ where
                     _ => {
                         loop {
                             if let Some(operator_stack_top) = operator_stack.last() {
+                                if let Operator::Exponent = operator_stack_top {
+                                    if let Operator::Exponent = operator {
+                                        break;
+                                    }
+                                }
                                 if operator_stack_top.precedence() >= operator.precedence() {
                                     let top_operator =
                                         operator_stack.pop().expect("Should be a valid operator");
@@ -196,7 +201,7 @@ where
             _ => {}
         }
     }
-    if let Some(Operand::Number(value)) = result.get(0) {
+    if let Some(Operand::Number(value)) = result.pop() {
         Ok(value.clone())
     } else {
         Err("Unable to compute result".to_string())
