@@ -4,10 +4,24 @@ mod config;
 mod db;
 mod plugins;
 
-use std::sync::{Arc, Mutex};
+use libloading::{Library, Symbol};
+use std::{
+    ffi::{CStr, CString},
+    sync::{Arc, Mutex},
+};
 use tauri::Manager;
 
 fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    unsafe {
+        let lib = Library::new(
+            "/Users/athulanoop/software_projects/Rust/fin/core-plugins/core-plugin-test/target/debug/libcore_plugin_test.dylib",
+        )
+        .unwrap();
+
+        let test_fn: Symbol<unsafe extern "C" fn()> = lib.get(b"hello").unwrap();
+        test_fn();
+    }
+
     app.manage(Arc::new(Mutex::new(config::Config::default())));
     app.manage(Arc::new(Mutex::new(db::Db::default())));
     app.manage(Arc::new(Mutex::new(cache::Cache::default())));
@@ -90,9 +104,41 @@ struct QueryResponse {
     calculation: Result<f64, String>,
     fs_entries: Result<Vec<db::fs::Entry>, String>,
 }
+#[repr(C)]
+pub struct ResultWrapper {
+    pub is_ok: bool,
+    pub value: f64,
+    pub error: *const libc::c_char,
+}
 #[tauri::command]
 fn query(app_handle: tauri::AppHandle, query: String) -> Result<QueryResponse, String> {
-    let calculation = calculator::calculate(&query);
+    let calculation;
+    unsafe {
+        let lib = Library::new(
+            "/Users/athulanoop/software_projects/Rust/fin/core-plugins/core-plugin-calculator/target/release/libcore_plugin_calculator.dylib",
+        )
+        .unwrap();
+
+        let calculate: Symbol<unsafe extern "C" fn(*const libc::c_char) -> ResultWrapper> = lib
+            .get(b"calculate")
+            .expect("calculate method should exist");
+        let free_error_string: Symbol<unsafe extern "C" fn(*const libc::c_char)> = lib
+            .get(b"free_error_string")
+            .expect("free_error_string method should exist");
+        let result = calculate(
+            CString::new(query.clone())
+                .expect("Should be valid query")
+                .into_raw(),
+        );
+
+        if result.is_ok {
+            calculation = Ok(result.value);
+        } else {
+            calculation = Err(String::from(CStr::from_ptr(result.error).to_string_lossy()));
+            free_error_string(result.error);
+        }
+        let _ = lib.close();
+    }
     let fs_entries = db::get_files(app_handle, &query);
     Ok(QueryResponse {
         calculation,
