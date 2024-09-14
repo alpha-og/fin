@@ -11,16 +11,6 @@ use std::{
 use tauri::Manager;
 
 fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    unsafe {
-        let lib = Library::new(
-            "/Users/athulanoop/software_projects/Rust/fin/core-plugins/core-plugin-test/target/debug/libcore_plugin_test.dylib",
-        )
-        .unwrap();
-
-        let test_fn: Symbol<unsafe extern "C" fn()> = lib.get(b"hello").unwrap();
-        test_fn();
-    }
-
     app.manage(Arc::new(Mutex::new(config::Config::default())));
     app.manage(Arc::new(Mutex::new(db::Db::default())));
     app.manage(Arc::new(Mutex::new(cache::Cache::default())));
