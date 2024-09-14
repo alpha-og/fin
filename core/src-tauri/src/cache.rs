@@ -41,7 +41,10 @@ impl Cache {
         self.cache_file_system(db, false).await;
     }
     async fn update_cache_states(&mut self, db: &db::Db) {
-        let pool = db.pool.as_ref().unwrap();
+        let pool = match db.pool.as_ref() {
+            Some(pool) => pool,
+            None => return,
+        };
         let result = sqlx::query("SELECT EXISTS (SELECT 1 FROM filesystem LIMIT 1)")
             .fetch_one(pool)
             .await

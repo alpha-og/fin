@@ -2,6 +2,7 @@ mod cache;
 mod calculator;
 mod config;
 mod db;
+mod plugins;
 
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
