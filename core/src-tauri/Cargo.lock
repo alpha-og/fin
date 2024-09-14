@@ -888,8 +888,6 @@ dependencies = [
  "dotenvy",
  "libc",
  "libloading 0.8.5",
- "num-traits",
- "regex",
  "serde",
  "serde_json",
  "sqlx",

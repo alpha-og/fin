@@ -1,3 +1,5 @@
+use std::ffi::{CStr, CString};
+
 use regex::Regex;
 
 #[derive(Debug, Clone, Copy)]
@@ -81,15 +83,16 @@ impl From<&str> for Token<f64> {
     }
 }
 fn tokenize(expression: &str) -> Vec<Token<f64>> {
-    let pattern =
-        Regex::new(r"([-|+]?\d+(?:\.\d+)?)|([+|\-|/])|(\*{1,2})|([\(|\)|\{|\}])").unwrap();
+    let pattern = Regex::new(r"([-]?\d+(?:\.\d+)?)|([+|\-|/])|(\*{1,2})|([\(|\)|\{|\}])").unwrap();
     pattern
         .captures_iter(expression)
+        // .filter(|capture| capture.get(0).is_some())
         .map(|capture| {
             let token = capture
                 .get(0)
                 .expect("Should be valid capture group index")
                 .as_str();
+            dbg!(&token);
             Token::from(token)
         })
         .collect()
@@ -227,8 +230,37 @@ where
     }
 }
 
-pub fn calculate(input: &String) -> Result<f64, String> {
-    let tokens = tokenize(input);
+#[repr(C)]
+pub struct ResultWrapper {
+    pub ok: bool,
+    pub value: f64,
+    pub error: *const libc::c_char,
+}
+
+#[no_mangle]
+pub extern "C" fn calculate(input: *const libc::c_char) -> ResultWrapper {
+    let input = unsafe { CStr::from_ptr(input) }.to_string_lossy();
+    let tokens = tokenize(&String::from(input));
     let postfix = convert_infix_to_postfix(tokens);
-    evaluate_postfix_expression(postfix)
+    match evaluate_postfix_expression(postfix) {
+        Ok(value) => ResultWrapper {
+            ok: true,
+            value,
+            error: std::ptr::null(),
+        },
+        Err(err) => ResultWrapper {
+            ok: false,
+            value: 0.0,
+            error: CString::new(err).unwrap().into_raw(),
+        },
+    }
+}
+#[no_mangle]
+pub extern "C" fn free_error_string(error: *const libc::c_char) {
+    if error.is_null() {
+        return;
+    }
+    unsafe {
+        let _ = CString::from_raw(error as *mut libc::c_char);
+    }
 }
