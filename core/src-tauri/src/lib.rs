@@ -1,7 +1,6 @@
 mod cache;
 mod config;
 mod db;
-mod plugins;
 
 use libloading::{Library, Symbol};
 use std::{
