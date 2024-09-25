@@ -1,10 +1,26 @@
 mod token;
 
+use plugin_api::{Plugin, PluginState};
 use token::Token;
 
-use plugin_api::Plugin;
+#[derive(Default)]
+pub struct CalculatorState {
+    result: f64,
+    history: Vec<f64>,
+}
 
-pub struct CalculatorPlugin {}
+impl PluginState for CalculatorState {
+    fn init() -> Box<dyn PluginState> {
+        Box::new(Self::default())
+    }
+    fn get(&self) -> &dyn PluginState {
+        self
+    }
+}
+
+pub struct CalculatorPlugin {
+    pub state: Box<dyn PluginState>,
+}
 
 impl Plugin for CalculatorPlugin {
     fn init(&self) {
