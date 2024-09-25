@@ -12,6 +12,13 @@ pub trait Plugin: Send {
     fn destroy(&self);
 }
 
+pub trait PluginState: Send {
+    fn init() -> Box<dyn PluginState>
+    where
+        Self: Sized + Default;
+    fn get(&self) -> &dyn PluginState;
+}
+
 pub struct PluginManager {
     pub plugins: HashMap<String, Box<dyn Plugin>>,
 }
