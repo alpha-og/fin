@@ -1,8 +1,8 @@
-use std::sync::mpsc::Sender;
+mod token;
+
+use token::Token;
 
 use plugin_api::Plugin;
-
-use regex::Regex;
 
 pub struct CalculatorPlugin {}
 
@@ -10,7 +10,12 @@ impl Plugin for CalculatorPlugin {
     fn init(&self) {
         println!("Initialised");
     }
-    fn execute(&self, sender: Sender<Result<f64, String>>, _fn_name: &str, args: Vec<String>) {
+    fn execute(
+        &self,
+        sender: std::sync::mpsc::Sender<Result<f64, String>>,
+        _fn_name: &str,
+        args: Vec<String>,
+    ) {
         let _ = sender.send(Self::calculate(&args[0]));
     }
     fn destroy(&self) {
@@ -18,239 +23,10 @@ impl Plugin for CalculatorPlugin {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-enum Operator {
-    Addition,
-    Subtraction,
-    Multiplication,
-    Division,
-    Exponent,
-    OpenParanthesis,
-    CloseParanthesis,
-    OpenBrace,
-    CloseBrace,
-    None,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum Operand<T: num_traits::Num + std::fmt::Debug + Clone> {
-    Number(T),
-    None,
-}
-
-#[derive(Debug)]
-enum Token<T: num_traits::Num + std::fmt::Debug + Clone> {
-    Operand(Operand<T>),
-    Operator(Operator),
-    None,
-}
-
-impl From<&str> for Operator {
-    fn from(operator: &str) -> Self {
-        match operator {
-            "+" => Self::Addition,
-            "-" => Self::Subtraction,
-            "*" => Self::Multiplication,
-            "/" => Self::Division,
-            "**" => Self::Exponent,
-            "(" => Self::OpenParanthesis,
-            ")" => Self::CloseParanthesis,
-            "{" => Self::OpenBrace,
-            "}" => Self::CloseBrace,
-            _ => Self::None,
-        }
-    }
-}
-
-impl Operator {
-    fn precedence(&self) -> u8 {
-        match self {
-            Self::Addition => 1,
-            Self::Subtraction => 1,
-            Self::Multiplication => 2,
-            Self::Division => 2,
-            Self::Exponent => 3,
-            _ => 0,
-        }
-    }
-}
-
-impl From<&str> for Operand<f64> {
-    fn from(operand: &str) -> Self {
-        operand
-            .parse::<f64>()
-            .map_or(Operand::None, |operand| Operand::Number(operand))
-    }
-}
-
-impl From<&str> for Token<f64> {
-    fn from(token_string: &str) -> Self {
-        let operand = Operand::from(token_string);
-        if let Operand::Number(_) = operand {
-            Self::Operand(operand)
-        } else {
-            let operator = Operator::from(token_string);
-            if let Operator::None = operator {
-                Self::None
-            } else {
-                Self::Operator(operator)
-            }
-        }
-    }
-}
 impl CalculatorPlugin {
-    fn tokenize(expression: &str) -> Vec<Token<f64>> {
-        let pattern =
-            Regex::new(r"([-]?\d+(?:\.\d+)?)|([+|\-|/])|(\*{1,2})|([\(|\)|\{|\}])").unwrap();
-        pattern
-            .captures_iter(expression)
-            // .filter(|capture| capture.get(0).is_some())
-            .map(|capture| {
-                let token = capture
-                    .get(0)
-                    .expect("Should be valid capture group index")
-                    .as_str();
-                Token::from(token)
-            })
-            .collect()
-    }
-    fn convert_infix_to_postfix<T>(tokens: Vec<Token<T>>) -> Vec<Token<T>>
-    where
-        T: num_traits::Num + std::fmt::Debug + Clone,
-    {
-        let mut postfix_expression: Vec<Token<T>> = Vec::new();
-        let mut operator_stack: Vec<Operator> = Vec::new();
-        for token in tokens {
-            match &token {
-                Token::Operand(_operand) => postfix_expression.push(token),
-                Token::Operator(operator) => {
-                    match operator {
-                        Operator::OpenParanthesis | Operator::OpenBrace => {
-                            operator_stack.push(operator.clone())
-                        }
-                        Operator::CloseParanthesis => loop {
-                            if let Some(operator_stack_top) = operator_stack.last() {
-                                match operator_stack_top {
-                                    Operator::OpenParanthesis => {
-                                        operator_stack.pop();
-                                        break;
-                                    }
-                                    _ => postfix_expression.push(Token::Operator(
-                                        operator_stack
-                                            .pop()
-                                            .expect("Vector stack should be non-empty"),
-                                    )),
-                                }
-                            } else {
-                                break;
-                            }
-                        },
-                        Operator::CloseBrace => loop {
-                            if let Some(operator_stack_top) = operator_stack.last() {
-                                match operator_stack_top {
-                                    Operator::OpenBrace => {
-                                        operator_stack.pop();
-                                        break;
-                                    }
-                                    _ => postfix_expression.push(Token::Operator(
-                                        operator_stack
-                                            .pop()
-                                            .expect("Vector stack should be non-empty"),
-                                    )),
-                                }
-                            } else {
-                                break;
-                            }
-                        },
-
-                        _ => {
-                            loop {
-                                if let Some(operator_stack_top) = operator_stack.last() {
-                                    if let Operator::Exponent = operator_stack_top {
-                                        if let Operator::Exponent = operator {
-                                            break;
-                                        }
-                                    }
-                                    if operator_stack_top.precedence() >= operator.precedence() {
-                                        let top_operator = operator_stack
-                                            .pop()
-                                            .expect("Should be a valid operator");
-                                        postfix_expression.push(Token::Operator(top_operator));
-                                    } else {
-                                        break;
-                                    }
-                                } else {
-                                    break;
-                                }
-                            }
-                            operator_stack.push(operator.clone());
-                        }
-                    };
-                }
-                _ => {}
-            }
-        }
-
-        loop {
-            if let Some(_) = operator_stack.last() {
-                let top_operator = operator_stack.pop().expect("Should be a valid operator");
-                postfix_expression.push(Token::Operator(top_operator));
-            } else {
-                break;
-            }
-        }
-        postfix_expression
-    }
-    fn evaluate_postfix_expression<T>(postfix_expression: Vec<Token<T>>) -> Result<T, String>
-    where
-        T: num_traits::Num
-            + std::fmt::Debug
-            + Clone
-            + std::convert::From<f64>
-            + num_traits::Pow<T, Output = T>,
-    {
-        let mut result: Vec<Operand<T>> = Vec::new();
-        for token in postfix_expression {
-            match token {
-                Token::Operand(operand) => result.push(operand.clone()),
-                Token::Operator(operator) => {
-                    let value_b;
-                    if let Some(Operand::Number(value)) = result.pop() {
-                        value_b = value
-                    } else {
-                        break;
-                    };
-                    let value_a;
-                    if let Some(Operand::Number(value)) = result.pop() {
-                        value_a = value
-                    } else {
-                        break;
-                    };
-
-                    match operator {
-                        Operator::Multiplication => result.push(Operand::Number(value_a * value_b)),
-                        Operator::Addition => result.push(Operand::Number(value_a + value_b)),
-                        Operator::Division => result.push(Operand::Number(value_a / value_b)),
-                        Operator::Subtraction => result.push(Operand::Number(value_a - value_b)),
-                        Operator::Exponent => {
-                            result.push(Operand::Number(value_a.pow(value_b)));
-                        }
-                        _ => {}
-                    }
-                }
-                _ => {}
-            }
-        }
-        if let Some(Operand::Number(value)) = result.pop() {
-            Ok(value.clone())
-        } else {
-            Err("Unable to compute result".to_string())
-        }
-    }
-
     pub fn calculate(input: &str) -> Result<f64, String> {
-        let tokens = Self::tokenize(input);
-        let postfix = Self::convert_infix_to_postfix(tokens);
-        Self::evaluate_postfix_expression(postfix)
+        let tokens = Token::tokenize(input);
+        let postfix = Token::convert_infix_to_postfix(tokens);
+        Token::evaluate_postfix_expression(postfix)
     }
 }
