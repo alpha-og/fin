@@ -16,6 +16,9 @@
     "core:window:allow-unminimize",
     "core:window:allow-start-dragging",
     "shell:default",
+    "core:event:default",
+    "core:event:allow-emit",
+    "core:event:allow-listen",
     {
       "identifier": "shell:allow-execute",
       "allow": [
