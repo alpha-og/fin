@@ -484,6 +484,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "core-plugin-calculator"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "num-traits",
+ "plugin-api",
+ "regex",
+]
+
+[[package]]
 name = "cpufeatures"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -884,10 +894,12 @@ dependencies = [
 name = "fin"
 version = "0.0.1"
 dependencies = [
+ "core-plugin-calculator",
  "directories",
  "dotenvy",
  "libc",
  "libloading 0.8.5",
+ "plugin-api",
  "serde",
  "serde_json",
  "sqlx",
@@ -2711,6 +2723,16 @@ dependencies = [
  "quick-xml",
  "serde",
  "time",
+]
+
+[[package]]
+name = "plugin-api"
+version = "0.1.0"
+dependencies = [
+ "directories",
+ "libc",
+ "libloading 0.8.5",
+ "walkdir",
 ]
 
 [[package]]

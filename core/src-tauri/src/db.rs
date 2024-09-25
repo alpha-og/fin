@@ -83,7 +83,7 @@ impl Db {
     }
 }
 
-pub fn get_files(app_handle: tauri::AppHandle, filter: &String) -> Result<Vec<fs::Entry>, String> {
+pub fn get_files(app_handle: &tauri::AppHandle, filter: &String) -> Result<Vec<fs::Entry>, String> {
     let db_state = app_handle.state::<Arc<Mutex<Db>>>();
     let db_arc = Arc::clone(&db_state);
     let filter = format!("%{filter}%");

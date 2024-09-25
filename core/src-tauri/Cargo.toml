@@ -26,6 +26,8 @@ sqlx = { version = "0.8.1", features = ["sqlite", "runtime-tokio", "tls-native-t
 toml = "0.8.9"
 libc = "0.2.9"
 libloading = "0.8.5"
+plugin-api = {path = "../../plugin-api/"}
+core-plugin-calculator = {path = "../../core-plugins/core-plugin-calculator/"}
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2.0.0-rc.1"

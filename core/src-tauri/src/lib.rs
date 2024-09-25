@@ -2,17 +2,26 @@ mod cache;
 mod config;
 mod db;
 
-use libloading::{Library, Symbol};
-use std::{
-    ffi::{CStr, CString},
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
 fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(Arc::new(Mutex::new(config::Config::default())));
     app.manage(Arc::new(Mutex::new(db::Db::default())));
     app.manage(Arc::new(Mutex::new(cache::Cache::default())));
+    app.manage(Arc::new(Mutex::new(plugin_api::PluginManager::default())));
+
+    let plugin_manager_state = app.state::<Arc<Mutex<plugin_api::PluginManager>>>();
+    loop {
+        let plugin_manager_guard = plugin_manager_state.try_lock();
+        if plugin_manager_guard.is_ok() {
+            let mut plugin_manager = plugin_manager_guard.expect("Thread should not be poisoned");
+            plugin_manager
+                .register_plugin("calculator", core_plugin_calculator::CalculatorPlugin {});
+
+            break;
+        }
+    }
 
     #[cfg(target_os = "macos")]
     app.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -92,42 +101,20 @@ struct QueryResponse {
     calculation: Result<f64, String>,
     fs_entries: Result<Vec<db::fs::Entry>, String>,
 }
-#[repr(C)]
-pub struct ResultWrapper {
-    pub is_ok: bool,
-    pub value: f64,
-    pub error: *const libc::c_char,
-}
+
 #[tauri::command]
 fn query(app_handle: tauri::AppHandle, query: String) -> Result<QueryResponse, String> {
-    let calculation;
-    unsafe {
-        let lib = Library::new(
-            "/Users/athulanoop/software_projects/Rust/fin/core-plugins/core-plugin-calculator/target/release/libcore_plugin_calculator.dylib",
-        )
-        .unwrap();
+    let plugin_manager_guard = app_handle.state::<Arc<Mutex<plugin_api::PluginManager>>>();
+    let plugin_manager = plugin_manager_guard.lock().expect("should not be locked");
 
-        let calculate: Symbol<unsafe extern "C" fn(*const libc::c_char) -> ResultWrapper> = lib
-            .get(b"calculate")
-            .expect("calculate method should exist");
-        let free_error_string: Symbol<unsafe extern "C" fn(*const libc::c_char)> = lib
-            .get(b"free_error_string")
-            .expect("free_error_string method should exist");
-        let result = calculate(
-            CString::new(query.clone())
-                .expect("Should be valid query")
-                .into_raw(),
-        );
-
-        if result.is_ok {
-            calculation = Ok(result.value);
-        } else {
-            calculation = Err(String::from(CStr::from_ptr(result.error).to_string_lossy()));
-            free_error_string(result.error);
-        }
-        let _ = lib.close();
-    }
-    let fs_entries = db::get_files(app_handle, &query);
+    let (sender, receiver) = std::sync::mpsc::channel();
+    plugin_manager.plugins.get("calculator").unwrap().execute(
+        sender,
+        "calculate",
+        vec![query.clone()],
+    );
+    let calculation = receiver.recv().expect("should receive calculation output");
+    let fs_entries = db::get_files(&app_handle, &query);
     Ok(QueryResponse {
         calculation,
         fs_entries,
