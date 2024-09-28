@@ -7,6 +7,7 @@ import {
   MutableRefObject,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { Command } from "@tauri-apps/plugin-shell";
 import "./App.css";
@@ -37,6 +38,8 @@ type T_Result = {
 };
 
 function App() {
+  // unlisten();
+
   const inputRef = useRef<HTMLInputElement>(null);
   const listItemRefs = useRef<RefObject<HTMLLIElement>[]>([]);
   const [result, setResult] = useState<T_Result[] | null>(null);
@@ -153,6 +156,10 @@ function App() {
 
   async function updateResults() {
     if (query.length > 0) {
+      emit("query", {
+        query,
+      });
+
       const response = (await invoke("query", {
         query,
       })) as T_QueryResponse<T_FsEntry[]>;
@@ -202,6 +209,9 @@ function App() {
   }, [selected]);
   useEffect(() => {
     updateResults();
+    listen<string>("response", (event) => {
+      console.log(event);
+    });
   }, [query]);
   useEffect(() => {
     if (selectedHistory !== null) {
