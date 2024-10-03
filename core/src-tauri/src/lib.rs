@@ -16,8 +16,12 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         let plugin_manager_guard = plugin_manager_state.try_lock();
         if plugin_manager_guard.is_ok() {
             let mut plugin_manager = plugin_manager_guard.expect("Thread should not be poisoned");
-            plugin_manager
-                .register_plugin("calculator", core_plugin_calculator::CalculatorPlugin {});
+            plugin_manager.register_plugin(
+                "calculator",
+                core_plugin_calculator::CalculatorPlugin {
+                    state: Box::new(core_plugin_calculator::CalculatorState::default()),
+                },
+            );
 
             break;
         }
