@@ -9,14 +9,14 @@ edition = "2021"
 
 [lib]
 name = "fin_lib"
-crate-type = ["lib", "cdylib", "staticlib"]
+crate-type = ["rlib", "cdylib", "staticlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.0.0-rc", features = [] }
+tauri-build = { version = "2.0.0", features = [] }
 
 [dependencies]
-tauri = { version = "2.0.0-rc", features = ["macos-private-api"] }
-tauri-plugin-shell = "2.0.0-rc"
+tauri = { version = "2.0.0", features = ["macos-private-api"] }
+tauri-plugin-shell = "2.0.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 walkdir = "2.5.0"
@@ -30,5 +30,5 @@ plugin-api = {path = "../../plugin-api/"}
 core-plugin-calculator = {path = "../../core-plugins/core-plugin-calculator/"}
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
-tauri-plugin-global-shortcut = "2.0.0-rc.1"
+tauri-plugin-global-shortcut = "2.0.0"
 
