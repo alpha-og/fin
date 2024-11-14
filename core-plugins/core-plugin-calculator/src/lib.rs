@@ -1,41 +1,52 @@
 mod token;
 
-use plugin_api::{Plugin, PluginState};
+use plugin_api::{Event, EventType, Metadata, Plugin, Response};
 use token::Token;
 
-#[derive(Default)]
-pub struct CalculatorState {
-    result: f64,
+pub struct CalculatorPlugin {
+    result: Option<f64>,
     history: Vec<f64>,
 }
 
-impl PluginState for CalculatorState {
-    fn init() -> Box<dyn PluginState> {
-        Box::new(Self::default())
+impl Default for CalculatorPlugin {
+    fn default() -> Self {
+        Self {
+            result: None,
+            history: Vec::new(),
+        }
     }
-    fn get(&self) -> &dyn PluginState {
-        self
-    }
-}
-
-pub struct CalculatorPlugin {
-    pub state: Box<dyn PluginState>,
 }
 
 impl Plugin for CalculatorPlugin {
-    fn init(&self) {
-        println!("Initialised");
+    fn get_metadata(&self) -> Metadata {
+        Metadata {
+            name: "Calculator".to_string(),
+            description: "A simple calculator".to_string(),
+            icon: None,
+            url: None,
+        }
     }
-    fn execute(
-        &self,
-        sender: std::sync::mpsc::Sender<Result<f64, String>>,
-        _fn_name: &str,
-        args: Vec<String>,
-    ) {
-        let _ = sender.send(Self::calculate(&args[0]));
+
+    fn get_registered_events(&self) -> Vec<EventType> {
+        let mut events = Vec::new();
+        events.push(EventType::UpdateSearchQuery);
+        events
     }
-    fn destroy(&self) {
-        println!("Destroyed");
+    fn get_response(&self) -> Option<Response> {
+        if let Some(result) = self.result {
+            Some(Response::F64(result))
+        } else {
+            None
+        }
+    }
+
+    fn listen(&mut self, event: &Event) {
+        if let Some(event_data) = &event.data {
+            if let Ok(result) = Self::calculate(&event_data) {
+                self.result = Some(result);
+                self.history.push(result);
+            }
+        }
     }
 }
 
