@@ -3,7 +3,7 @@ mod config;
 mod db;
 
 use std::sync::{Arc, Mutex};
-use tauri::Manager;
+use tauri::{plugin, Manager};
 
 fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(Arc::new(Mutex::new(config::Config::default())));
@@ -16,13 +16,11 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         let plugin_manager_guard = plugin_manager_state.try_lock();
         if plugin_manager_guard.is_ok() {
             let mut plugin_manager = plugin_manager_guard.expect("Thread should not be poisoned");
+            plugin_manager.init();
             plugin_manager.register_plugin(
                 "calculator",
-                core_plugin_calculator::CalculatorPlugin {
-                    state: Box::new(core_plugin_calculator::CalculatorState::default()),
-                },
+                core_plugin_calculator::CalculatorPlugin::default(),
             );
-
             break;
         }
     }
@@ -109,15 +107,16 @@ struct QueryResponse {
 #[tauri::command]
 fn query(app_handle: tauri::AppHandle, query: String) -> Result<QueryResponse, String> {
     let plugin_manager_guard = app_handle.state::<Arc<Mutex<plugin_api::PluginManager>>>();
-    let plugin_manager = plugin_manager_guard.lock().expect("should not be locked");
+    let mut plugin_manager = plugin_manager_guard.lock().expect("should not be locked");
 
-    let (sender, receiver) = std::sync::mpsc::channel();
-    plugin_manager.plugins.get("calculator").unwrap().execute(
-        sender,
-        "calculate",
-        vec![query.clone()],
-    );
-    let calculation = receiver.recv().expect("should receive calculation output");
+    plugin_manager.broadcast(plugin_api::Event {
+        event_type: plugin_api::EventType::UpdateSearchQuery,
+        data: Some(query.clone()),
+    });
+    let calculation = match plugin_manager.get_responses().get(0) {
+        Some(plugin_api::Response::F64(result)) => Ok(result.clone()),
+        _ => Err("Calculation failed".to_string()),
+    };
     let fs_entries = db::get_files(&app_handle, &query);
     Ok(QueryResponse {
         calculation,
