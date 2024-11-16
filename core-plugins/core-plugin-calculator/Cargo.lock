@@ -37,6 +37,7 @@ dependencies = [
  "num-traits",
  "plugin-api",
  "regex",
+ "serde",
 ]
 
 [[package]]

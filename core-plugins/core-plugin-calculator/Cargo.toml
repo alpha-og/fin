@@ -11,3 +11,4 @@ regex = "1.9.6"
 num-traits = "0.2.9"
 libc = "0.2.9"
 plugin-api = { path = "../../plugin-api/" }
+serde = {version = "1.0.9", features = ["derive"]}
