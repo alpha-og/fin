@@ -1,4 +1,10 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    fmt::Debug,
+    sync::{Arc, Mutex, MutexGuard},
+};
+
+use erased_serde::serialize_trait_object;
 
 pub struct Metadata {
     pub name: String,
@@ -7,55 +13,88 @@ pub struct Metadata {
     pub url: Option<String>,
 }
 
-#[derive(PartialEq, Eq, Hash, Debug)] // derive for making enum comparisons
-pub enum EventType {
-    UpdateSearchQuery,
-}
-
-pub struct Event {
-    pub event_type: EventType,
-    pub data: Option<String>,
-}
-
-pub enum Response {
-    Text(String),
-    F64(f64),
-}
-
-pub struct BroadcastList {
-    event_type: EventType,
-    plugins: Vec<String>,
-}
-
-pub trait Plugin: Send {
-    fn listen(&mut self, event: &Event);
+pub trait Plugin: Send + Sync {
+    fn init(&mut self, client_state_arc: Arc<Mutex<ClientState>>);
+    fn start(&mut self);
     fn get_metadata(&self) -> Metadata;
-    fn get_registered_events(&self) -> Vec<EventType>;
-    fn get_response(&self) -> Option<Response>;
+    fn destroy(&mut self);
+    fn clone_box(&self) -> Box<dyn Plugin>;
+}
+
+impl Clone for Box<dyn Plugin> {
+    fn clone(&self) -> Self {
+        self.clone_box()
+    }
+}
+
+pub trait SearchResultType: Send + Sync + erased_serde::Serialize + Debug {
+    fn clone_box(&self) -> Box<dyn SearchResultType>;
+}
+
+serialize_trait_object!(SearchResultType);
+
+impl Clone for Box<dyn SearchResultType> {
+    fn clone(&self) -> Self {
+        self.clone_box()
+    }
+}
+
+#[derive(Clone, serde::Serialize, std::fmt::Debug)]
+pub struct TestResult {
+    pub name: String,
+    pub path: String,
+}
+
+impl SearchResultType for TestResult {
+    fn clone_box(&self) -> Box<dyn SearchResultType> {
+        Box::new(self.clone())
+    }
+}
+
+#[derive(Clone, serde::Serialize, Debug)]
+pub enum SearchResult {
+    List(Vec<Box<dyn SearchResultType>>),
+    Single(Box<dyn SearchResultType>),
+}
+
+pub struct ClientState {
+    search_query: String,
+    search_results: Vec<SearchResult>,
+}
+
+impl Default for ClientState {
+    fn default() -> Self {
+        Self {
+            search_query: String::new(),
+            search_results: vec![],
+        }
+    }
+}
+
+struct Worker {
+    id: usize,
+    plugin_name: String,
+    thread: std::thread::JoinHandle<()>,
 }
 
 pub struct PluginManager {
     pub plugins: HashMap<String, Box<dyn Plugin>>,
-    pub broadcast_lists: Vec<BroadcastList>,
+    client_state: Arc<Mutex<ClientState>>,
+    workers: Vec<Worker>,
 }
 
 impl Default for PluginManager {
     fn default() -> Self {
         Self {
             plugins: HashMap::new(),
-            broadcast_lists: vec![],
+            client_state: Arc::new(Mutex::new(ClientState::default())),
+            workers: vec![],
         }
     }
 }
 
 impl PluginManager {
     // pub fn init(&self, plugin_directory: &str) {}
-    pub fn init(&mut self) {
-        self.broadcast_lists.push(BroadcastList {
-            event_type: EventType::UpdateSearchQuery,
-            plugins: Vec::new(),
-        });
-    }
     // pub fn index_third_party_plugins(plugin_directory: &str) {
     //     for entry in walkdir::WalkDir::new(plugin_directory)
     //         .min_depth(1)
@@ -72,66 +111,53 @@ impl PluginManager {
     //                 .get(file_name_substrings.len() - 1)
     //                 .unwrap();
     //             file_extension == "so" || file_extension == "lua"
-    //         })
+    //         }borrow)
     //         .filter_map(Result::ok)
     //     {
     //         dbg!(entry.path());
     //     }
     // }
-    pub fn register_plugin<T: Plugin + 'static>(&mut self, identifier: &str, plugin: T) {
-        // register events requested by plugin
-        let registered_events = plugin.get_registered_events();
-        registered_events.iter().for_each(|event| {
-            self.broadcast_lists
-                .iter_mut()
-                .filter(|broadcast_list| broadcast_list.event_type == *event)
-                .collect::<Vec<_>>()
-                .get_mut(0)
-                .map_or_else(
-                    || {},
-                    |broadcast_list| {
-                        broadcast_list.plugins.push(identifier.to_string());
-                    },
-                );
-        });
-        // register plugin
-        self.plugins
-            .insert(identifier.to_string(), Box::new(plugin));
-        println!("Plugin {identifier} registered");
-    }
-
-    // function to broadcast an event to all plugins that are listening to the same event type
-    pub fn broadcast(&mut self, event: Event) {
-        self.broadcast_lists
-            .iter_mut()
-            .filter(|broadcast_list| broadcast_list.event_type == event.event_type)
-            .collect::<Vec<_>>()
-            .get_mut(0)
-            .map_or_else(
-                || {},
-                |broadcast_list| {
-                    broadcast_list
-                        .plugins
-                        .iter_mut()
-                        .for_each(|plugin_identifier| {
-                            if let Some(plugin) = self.plugins.get_mut(plugin_identifier) {
-                                plugin.listen(&event);
-                            }
-                        });
-                },
-            );
-    }
-
-    pub fn get_responses(&mut self) -> Vec<Response> {
-        let mut responses: Vec<Response> = vec![];
-        self.plugins
-            .iter()
-            .for_each(|(_plugin_identifier, plugin)| {
-                let response = plugin.get_response();
-                if let Some(response) = response {
-                    responses.push(response);
-                }
+    pub fn init(&mut self, plugins: Vec<Box<dyn Plugin>>) {
+        for mut plugin in plugins {
+            let metadata = plugin.get_metadata();
+            plugin.init(Arc::clone(&self.client_state));
+            self.plugins.insert(metadata.name.clone(), plugin.clone());
+            self.workers.push(Worker {
+                id: 0,
+                plugin_name: metadata.name.clone(),
+                thread: std::thread::spawn(move || {
+                    plugin.start();
+                }),
             });
-        responses
+            println!("Plugin {} initialized!", metadata.name);
+        }
+    }
+    pub fn get_client_state(&self) -> MutexGuard<ClientState> {
+        self.client_state
+            .lock()
+            .expect("Failed to lock client state")
+    }
+    pub fn get_client_state_arc(&self) -> Arc<Mutex<ClientState>> {
+        Arc::clone(&self.client_state)
+    }
+    // fn load_plugin(&mut self, plugin_name: &str, plugin: Box<dyn Plugin>) {}
+    // pub fn register_plugin(&mut self, plugin_name: &str, plugin: Box<dyn Plugin>) {}
+}
+
+impl ClientState {
+    pub fn update_search_query(&mut self, query: String) {
+        println!("Searching for: {}", query);
+        self.search_query = query;
+        self.search_results.clear();
+    }
+    pub fn update_search_results(&mut self, results: Vec<SearchResult>) {
+        println!("Search results: {:?}", results);
+        self.search_results = results;
+    }
+    pub fn get_search_query(&self) -> &str {
+        &self.search_query
+    }
+    pub fn get_search_results(&self) -> Vec<SearchResult> {
+        self.search_results.clone()
     }
 }
