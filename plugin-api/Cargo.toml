@@ -7,4 +7,6 @@ edition = "2021"
 walkdir = "2.5.0"
 directories = "5.0.1"
 libc = "0.2.9"
+serde = { version = "1.0.9", features = ["derive"] }
+erased-serde = "0.4.5"
 libloading = "0.8.5"
