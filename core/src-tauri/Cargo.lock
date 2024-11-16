@@ -2894,8 +2894,10 @@ name = "plugin-api"
 version = "0.1.0"
 dependencies = [
  "directories",
+ "erased-serde",
  "libc",
  "libloading 0.8.5",
+ "serde",
  "walkdir",
 ]
 

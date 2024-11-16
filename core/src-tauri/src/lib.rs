@@ -3,7 +3,7 @@ mod config;
 mod db;
 
 use std::sync::{Arc, Mutex};
-use tauri::{plugin, Manager};
+use tauri::Manager;
 
 fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(Arc::new(Mutex::new(config::Config::default())));
@@ -16,11 +16,9 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         let plugin_manager_guard = plugin_manager_state.try_lock();
         if plugin_manager_guard.is_ok() {
             let mut plugin_manager = plugin_manager_guard.expect("Thread should not be poisoned");
-            plugin_manager.init();
-            plugin_manager.register_plugin(
-                "calculator",
+            plugin_manager.init(vec![Box::new(
                 core_plugin_calculator::CalculatorPlugin::default(),
-            );
+            )]);
             break;
         }
     }
@@ -69,6 +67,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             }
         });
     }
+
     Ok(())
 }
 
@@ -93,33 +92,39 @@ pub fn run() {
         .on_window_event(handle_window_events)
         .plugin(tauri_plugin_shell::init())
         .setup(setup)
-        .invoke_handler(tauri::generate_handler![query])
+        .invoke_handler(tauri::generate_handler![
+            update_search_query,
+            get_search_results
+        ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(handle_run_events)
 }
-#[derive(serde::Serialize, Clone)]
-struct QueryResponse {
-    calculation: Result<f64, String>,
-    fs_entries: Result<Vec<db::fs::Entry>, String>,
+
+#[tauri::command]
+fn update_search_query(app_handle: tauri::AppHandle, query: String) {
+    let plugin_manager_state = app_handle.state::<Arc<Mutex<plugin_api::PluginManager>>>();
+    loop {
+        let plugin_manager_guard = plugin_manager_state.try_lock();
+        if plugin_manager_guard.is_ok() {
+            let plugin_manager = plugin_manager_guard.expect("Thread should not be poisoned");
+            plugin_manager.get_client_state().update_search_query(query);
+            break;
+        }
+    }
 }
 
 #[tauri::command]
-fn query(app_handle: tauri::AppHandle, query: String) -> Result<QueryResponse, String> {
-    let plugin_manager_guard = app_handle.state::<Arc<Mutex<plugin_api::PluginManager>>>();
-    let mut plugin_manager = plugin_manager_guard.lock().expect("should not be locked");
-
-    plugin_manager.broadcast(plugin_api::Event {
-        event_type: plugin_api::EventType::UpdateSearchQuery,
-        data: Some(query.clone()),
-    });
-    let calculation = match plugin_manager.get_responses().get(0) {
-        Some(plugin_api::Response::F64(result)) => Ok(result.clone()),
-        _ => Err("Calculation failed".to_string()),
-    };
-    let fs_entries = db::get_files(&app_handle, &query);
-    Ok(QueryResponse {
-        calculation,
-        fs_entries,
-    })
+fn get_search_results(
+    app_handle: tauri::AppHandle,
+) -> Result<Vec<plugin_api::SearchResult>, String> {
+    let plugin_manager_state = app_handle.state::<Arc<Mutex<plugin_api::PluginManager>>>();
+    loop {
+        let plugin_manager_guard = plugin_manager_state.try_lock();
+        if plugin_manager_guard.is_ok() {
+            let plugin_manager = plugin_manager_guard.expect("Thread should not be poisoned");
+            let search_results = plugin_manager.get_client_state().get_search_results();
+            break Ok(search_results);
+        }
+    }
 }
