@@ -1,7 +1,9 @@
 use std::{
     collections::HashMap,
     fmt::Debug,
+    os::unix::thread,
     sync::{Arc, Mutex, MutexGuard},
+    time,
 };
 
 use erased_serde::serialize_trait_object;
@@ -127,6 +129,7 @@ impl PluginManager {
                 plugin_name: metadata.name.clone(),
                 thread: std::thread::spawn(move || loop {
                     plugin.start();
+                    std::thread::sleep(time::Duration::from_millis(100));
                 }),
             });
             println!("Plugin {} initialized!", metadata.name);
