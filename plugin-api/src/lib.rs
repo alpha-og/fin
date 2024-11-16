@@ -125,7 +125,7 @@ impl PluginManager {
             self.workers.push(Worker {
                 id: 0,
                 plugin_name: metadata.name.clone(),
-                thread: std::thread::spawn(move || {
+                thread: std::thread::spawn(move || loop {
                     plugin.start();
                 }),
             });

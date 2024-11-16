@@ -33,10 +33,8 @@ impl Plugin for CalculatorPlugin {
             .lock()
             .expect("Failed to lock client state");
 
-        loop {
-            let query = client_state.get_search_query();
-            println!("Calculator plugin query: {}", query);
-        }
+        let query = client_state.get_search_query();
+        println!("Calculator plugin query: {}", query);
     }
     fn get_metadata(&self) -> plugin_api::Metadata {
         plugin_api::Metadata {
