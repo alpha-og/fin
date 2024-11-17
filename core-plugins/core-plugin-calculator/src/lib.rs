@@ -8,26 +8,13 @@ use token::Token;
 #[derive(Clone)]
 pub struct CalculatorPlugin {
     result: Option<f64>,
-    history: Vec<f64>,
     client_state: Arc<Mutex<plugin_api::ClientState>>,
-}
-
-#[derive(Clone, Debug, serde::Serialize)]
-struct CalculatorResult {
-    result: f64,
-}
-
-impl plugin_api::SearchResultType for CalculatorResult {
-    fn clone_box(&self) -> Box<dyn plugin_api::SearchResultType> {
-        Box::new(self.clone())
-    }
 }
 
 impl Default for CalculatorPlugin {
     fn default() -> Self {
         Self {
             result: None,
-            history: Vec::new(),
             client_state: Arc::new(Mutex::new(plugin_api::ClientState::default())),
         }
     }
@@ -38,6 +25,7 @@ impl Plugin for CalculatorPlugin {
         self.client_state = client_state_arc;
         println!("Calculator plugin initialized!");
     }
+
     fn start(&mut self) {
         let mut client_state = self
             .client_state
@@ -62,9 +50,13 @@ impl Plugin for CalculatorPlugin {
             for result in existing_results {
                 new_results.push(result);
             }
-            new_results.push(plugin_api::SearchResult::Single(Box::new(
-                CalculatorResult { result },
-            )));
+            new_results.push(plugin_api::SearchResult::new(
+                result.to_string(),
+                None,
+                Some(plugin_api::Icon::Calculator),
+                Some(plugin_api::Action::Copy),
+                Some(10),
+            ));
             client_state.update_search_results(new_results);
         }
     }
