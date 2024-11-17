@@ -28,7 +28,8 @@ impl Clone for Box<dyn Plugin> {
 
 #[derive(Clone, serde::Serialize, Debug)]
 pub enum Action {
-    Open,
+    Open(String),
+    LaunchApplication(String),
     Copy,
 }
 
@@ -45,7 +46,7 @@ pub struct SearchResult {
 pub enum Icon {
     File,
     Folder,
-    Calculator,
+    Copy,
 }
 
 impl SearchResult {
@@ -146,9 +147,12 @@ impl PluginManager {
         }
     }
     pub fn get_client_state(&self) -> MutexGuard<ClientState> {
-        self.client_state
-            .lock()
-            .expect("Failed to lock client state")
+        loop {
+            let client_state_guard = self.client_state.try_lock();
+            if client_state_guard.is_ok() {
+                return client_state_guard.expect("Thread should not be poisoned");
+            }
+        }
     }
     pub fn get_client_state_arc(&self) -> Arc<Mutex<ClientState>> {
         Arc::clone(&self.client_state)
