@@ -12,36 +12,37 @@ import { Command } from "@tauri-apps/plugin-shell";
 import "./App.css";
 import { SearchIcon, Folder, File, FileQuestion, Copy } from "lucide-react";
 import { useHotkeys, isHotkeyPressed } from "react-hotkeys-hook";
-type T_FsEntry = {
-  name: string;
-  path: string;
-  kind: string;
-  ctime: number;
-  mtime: number;
-  atime: number;
-};
-
-type T_Response<T> = {
-  Ok?: T;
-  Err?: string;
-};
-
-type T_QueryResponse<T> = {
-  fs_entries: T_Response<T>;
-  calculation: T_Response<number>;
-};
 
 type T_Result = {
-  fsEntry?: T_FsEntry;
-  calculation?: number;
+  title: string;
+  description: string | null;
+  icon: string | null;
+  action: any;
+  priority: number;
+};
+
+const Icon = ({ icon }: { icon: string | null }) => {
+  if (icon === null) return <FileQuestion size={28} className="shrink-0" />;
+  switch (icon.toLowerCase()) {
+    case "application":
+      return <File size={28} className="shrink-0" />;
+    case "folder":
+      return <Folder size={28} className="shrink-0" />;
+    case "file":
+      return <File size={28} className="shrink-0" />;
+    case "copy":
+      return <Copy size={28} className="shrink-0" />;
+    default:
+      return <FileQuestion size={28} className="shrink-0" />;
+  }
 };
 
 function App() {
   const inputRef = useRef<HTMLInputElement>(null);
-  const listItemRefs = useRef<RefObject<HTMLLIElement>[]>([]);
   const [result, setResult] = useState<T_Result[] | null>(null);
   const [query, setQuery] = useState<string>("");
   const [history, setHistory] = useState<string[]>([]);
+  const listItemRefs = useRef<RefObject<HTMLLIElement>[]>([]);
   const [selectedHistory, setSelectedHistory] = useState<number | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const currentWindow = getCurrentWindow();
@@ -52,7 +53,9 @@ function App() {
       if (target.value === "") {
         currentWindow.hide();
       }
+
       target.value = "";
+      setQuery("");
       setResult(null);
     },
     {
@@ -125,26 +128,27 @@ function App() {
   );
   const actionRef = useHotkeys("enter", async () => {
     const selectedResult = result![selected!]!;
-    if (selectedResult.fsEntry) {
-      if (selectedResult.fsEntry.kind === "Application") {
-        Command.create("exec-sh", ["-c", `open ${selectedResult.fsEntry.path}`])
-          .execute()
-          .then((result) => {
-            console.log(result);
-          });
-      } else {
-        Command.create("exec-sh", [
-          "-c",
-          `open -R "${selectedResult.fsEntry.path}"`,
-        ])
-          .execute()
-          .then((result) => {
-            console.log(result);
-          });
-      }
-    } else if (selectedResult.calculation) {
+    if (selectedResult.action.LaunchApplication) {
+      Command.create("exec-sh", [
+        "-c",
+        `open ${selectedResult.action.LaunchApplication}`,
+      ])
+        .execute()
+        .then((result) => {
+          console.log(result);
+        });
+    } else if (selectedResult.action.Open) {
+      Command.create("exec-sh", [
+        "-c",
+        `open -R "${selectedResult.action.Open}"`,
+      ])
+        .execute()
+        .then((result) => {
+          console.log(result);
+        });
+    } else if (selectedResult.action.Copy) {
       await navigator.clipboard.writeText(
-        selectedResult.calculation?.toString() || "",
+        selectedResult.title.toString() || "",
       );
     }
     setSelected(null);
@@ -153,25 +157,35 @@ function App() {
 
   async function updateResults() {
     if (query.length > 0) {
-      const response = (await invoke("query", {
+      await invoke("update_search_query", {
         query,
-      })) as T_QueryResponse<T_FsEntry[]>;
-      let result: T_Result[] = [];
-      if (response.calculation.Ok) {
-        result.push({ calculation: response.calculation.Ok });
-      }
-
-      if (response.fs_entries.Ok) {
-        result = [
-          ...result,
-          ...response.fs_entries.Ok.map((item) => ({
-            fsEntry: item,
-          })),
-        ];
-      }
-      setResult(result);
+      });
     } else setResult(null);
   }
+
+  useEffect(() => {
+    updateResults();
+  }, [query]);
+
+  useEffect(() => {
+    let interval: number;
+    if (query.length > 0) {
+      interval = setInterval(() => {
+        invoke("get_search_results").then((response) => {
+          if (JSON.stringify(response) !== JSON.stringify(result)) {
+            response = (response as T_Result[]).sort(
+              (a, b) => b.priority - a.priority,
+            );
+            setResult(response as T_Result[]);
+          }
+        });
+      }, 100);
+    }
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [query, result]);
 
   useEffect(() => {
     clearSearchRef.current = inputRef.current!;
@@ -200,9 +214,6 @@ function App() {
       });
     }
   }, [selected]);
-  useEffect(() => {
-    updateResults();
-  }, [query]);
   useEffect(() => {
     if (selectedHistory !== null) {
       setQuery(history[selectedHistory]);
@@ -248,41 +259,14 @@ function App() {
                 setSelected(index);
               }}
             >
-              {item.calculation && (
-                <>
-                  <div className="w-full">
-                    <p className="w-full truncate text-neutral-400">
-                      = {item.calculation.toString()}
-                    </p>
-                  </div>
-                  <span className="rounded-lg p-1 flex flex-row items-center justify-center hover:bg-white/10 hover:cursor-pointer">
-                    <Copy size={28} className="shrink-0" />
-                  </span>
-                </>
-              )}
-              {item.fsEntry && (
-                <>
-                  <span>
-                    {item.fsEntry.kind === "File" ? (
-                      <File size={28} className="shrink-0" />
-                    ) : item.fsEntry.kind === "Directory" ? (
-                      <Folder size={28} className="shrink-0" />
-                    ) : (
-                      <FileQuestion size={28} className="shrink-0" />
-                    )}
-                  </span>
-                  <div className="w-11/12 flex flex-col justify-evenly items-start">
-                    <span className="w-full">
-                      <p className="truncate">{item.fsEntry.name}</p>
-                    </span>{" "}
-                    <span className="w-full">
-                      <p className="w-full truncate text-neutral-400">
-                        {item.fsEntry.path}
-                      </p>
-                    </span>
-                  </div>
-                </>
-              )}
+              <div className="w-full overflow-hidden">
+                <p className="w-full truncate text-neutral-400">
+                  {item.title.toString()}
+                </p>
+              </div>
+              <span className="rounded-lg p-1 flex flex-row items-center justify-center hover:bg-white/10 hover:cursor-pointer">
+                {<Icon icon={item.icon} />}
+              </span>
             </li>
           ))}
         </ul>
