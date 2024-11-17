@@ -1,12 +1,9 @@
 use std::{
     collections::HashMap,
     fmt::Debug,
-    os::unix::thread,
     sync::{Arc, Mutex, MutexGuard},
     time,
 };
-
-use erased_serde::serialize_trait_object;
 
 pub struct Metadata {
     pub name: String,
@@ -29,34 +26,47 @@ impl Clone for Box<dyn Plugin> {
     }
 }
 
-pub trait SearchResultType: Send + Sync + erased_serde::Serialize + Debug {
-    fn clone_box(&self) -> Box<dyn SearchResultType>;
-}
-
-serialize_trait_object!(SearchResultType);
-
-impl Clone for Box<dyn SearchResultType> {
-    fn clone(&self) -> Self {
-        self.clone_box()
-    }
-}
-
-#[derive(Clone, serde::Serialize, std::fmt::Debug)]
-pub struct TestResult {
-    pub name: String,
-    pub path: String,
-}
-
-impl SearchResultType for TestResult {
-    fn clone_box(&self) -> Box<dyn SearchResultType> {
-        Box::new(self.clone())
-    }
+#[derive(Clone, serde::Serialize, Debug)]
+pub enum Action {
+    Open,
+    Copy,
 }
 
 #[derive(Clone, serde::Serialize, Debug)]
-pub enum SearchResult {
-    List(Vec<Box<dyn SearchResultType>>),
-    Single(Box<dyn SearchResultType>),
+pub struct SearchResult {
+    title: String,
+    description: Option<String>,
+    icon: Option<Icon>,
+    action: Option<Action>,
+    priority: Option<u8>,
+}
+
+#[derive(Clone, serde::Serialize, Debug)]
+pub enum Icon {
+    File,
+    Folder,
+    Calculator,
+}
+
+impl SearchResult {
+    pub fn new(
+        title: String,
+        description: Option<String>,
+        icon: Option<Icon>,
+        action: Option<Action>,
+        mut priority: Option<u8>,
+    ) -> Self {
+        if let None = priority {
+            priority = Some(0);
+        }
+        Self {
+            title,
+            description,
+            icon,
+            action,
+            priority,
+        }
+    }
 }
 
 pub struct ClientState {
