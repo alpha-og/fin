@@ -1,0 +1,13 @@
+[package]
+name = "core-plugin-fs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+directories = "5.0.1"
+walkdir = "2.5.0"
+serde = { version = "1", features = ["derive"] }
+dotenvy = "0.15.7"
+sqlx = { version = "0.8.1", features = ["sqlite", "runtime-tokio", "tls-native-tls", "macros"] }
+tokio = {version="1.9.0", features=["full"]}
+plugin-api = { path = "../../plugin-api" }

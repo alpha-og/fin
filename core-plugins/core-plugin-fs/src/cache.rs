@@ -1,25 +1,25 @@
-use crate::db::{self, fs};
+use crate::db;
 use sqlx::Row;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CacheType {
     Filesystem,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum CacheStatus {
     Outdated,
     Updated,
     Updating,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CacheEntry {
     pub r#type: CacheType,
     pub status: CacheStatus,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Cache {
     pub filesystem: CacheEntry,
 }
@@ -72,12 +72,12 @@ impl Cache {
 
         self.filesystem.status = CacheStatus::Updating;
         dbg!("Caching file system");
-        let entries = fs::Fs::index_file_system();
+        let entries = db::fs::Fs::index_file_system();
         let pool = db.pool.as_ref().unwrap();
         let query = "INSERT OR REPLACE INTO filesystem (name, path, kind, ctime, mtime, atime) VALUES ($1, $2, $3, $4, $5, $6)";
         dbg!("Creating transactions for file system index");
         let mut tx = pool.begin().await.unwrap();
-        for fs::Entry {
+        for db::fs::Entry {
             name,
             path,
             kind,

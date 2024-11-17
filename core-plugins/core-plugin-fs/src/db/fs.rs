@@ -1,7 +1,7 @@
 use directories::BaseDirs;
 use std::os::unix::fs::MetadataExt;
 use walkdir::WalkDir;
-#[derive(serde::Serialize, Clone)]
+#[derive(serde::Serialize, Clone, PartialEq)]
 pub enum EntryKind {
     File,
     Directory,
@@ -32,7 +32,7 @@ impl EntryKind {
     }
 }
 
-#[derive(serde::Serialize, Clone)]
+#[derive(serde::Serialize, Clone, PartialEq)]
 pub struct Entry {
     pub name: String,
     pub path: String,

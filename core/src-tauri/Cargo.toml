@@ -19,15 +19,13 @@ tauri = { version = "2.0.0", features = ["macos-private-api"] }
 tauri-plugin-shell = "2.0.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-walkdir = "2.5.0"
-dotenvy = "0.15.7"
 directories = "5.0.1"
-sqlx = { version = "0.8.1", features = ["sqlite", "runtime-tokio", "tls-native-tls", "macros"] }
 toml = "0.8.9"
 libc = "0.2.9"
 libloading = "0.8.5"
 plugin-api = {path = "../../plugin-api/"}
 core-plugin-calculator = {path = "../../core-plugins/core-plugin-calculator/"}
+core-plugin-fs = {path = "../../core-plugins/core-plugin-fs/"}
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2.0.0"
