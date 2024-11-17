@@ -51,9 +51,9 @@ impl Plugin for CalculatorPlugin {
                 new_results.push(result);
             }
             new_results.push(plugin_api::SearchResult::new(
-                result.to_string(),
+                format!("= {result}"),
                 None,
-                Some(plugin_api::Icon::Calculator),
+                Some(plugin_api::Icon::Copy),
                 Some(plugin_api::Action::Copy),
                 Some(10),
             ));
