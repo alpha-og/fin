@@ -22,4 +22,5 @@ The default key-binding (global) is `Shift+Alt+Space` which is hardcoded into th
 
 ### Building
 
-Run `pnpm tauri build` to build the application.
+1. Navigate to the `core` directory by running `cd core` from the project root
+2. Run `pnpm tauri build` to build the application.
