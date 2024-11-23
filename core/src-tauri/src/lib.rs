@@ -1,6 +1,9 @@
 mod config;
 
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 use tauri::Manager;
 
 fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
@@ -60,7 +63,9 @@ pub fn run() {
         .setup(setup)
         .invoke_handler(tauri::generate_handler![
             update_search_query,
-            get_search_results
+            get_search_results,
+            get_plugins,
+            update_plugin_config
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -91,6 +96,43 @@ fn get_search_results(
             let plugin_manager = plugin_manager_guard.expect("Thread should not be poisoned");
             let search_results = plugin_manager.get_client_state().get_search_results();
             break Ok(search_results);
+        }
+    }
+}
+
+#[tauri::command]
+fn get_plugins(
+    app_handle: tauri::AppHandle,
+) -> Result<HashMap<String, plugin_api::PluginData>, String> {
+    let plugin_manager_state = app_handle.state::<Arc<Mutex<plugin_api::PluginManager>>>();
+    loop {
+        let plugin_manager_guard = plugin_manager_state.try_lock();
+        if plugin_manager_guard.is_ok() {
+            let plugin_manager = plugin_manager_guard.expect("Thread should not be poisoned");
+            let plugins = plugin_manager.get_plugins();
+            println!("Plugins: {:?}", plugins);
+            break Ok(plugins);
+        }
+    }
+}
+
+#[tauri::command]
+fn update_plugin_config(
+    app_handle: tauri::AppHandle,
+    plugin_name: String,
+    key: String,
+    value: String,
+) {
+    let plugin_manager_state = app_handle.state::<Arc<Mutex<plugin_api::PluginManager>>>();
+    loop {
+        let plugin_manager_guard = plugin_manager_state.try_lock();
+        if plugin_manager_guard.is_ok() {
+            let mut plugin_manager = plugin_manager_guard.expect("Thread should not be poisoned");
+            let loaded_plugin = plugin_manager
+                .get_plugin_mut(&plugin_name)
+                .expect("Plugin not found");
+            loaded_plugin.config.insert(key, value);
+            break;
         }
     }
 }
