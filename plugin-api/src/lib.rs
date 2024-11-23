@@ -5,6 +5,7 @@ use std::{
     time,
 };
 
+#[derive(Clone, serde::Serialize, Debug)]
 pub struct Metadata {
     pub name: String,
     pub description: String,
@@ -16,6 +17,7 @@ pub trait Plugin: Send + Sync {
     fn init(&mut self, client_state_arc: Arc<Mutex<ClientState>>);
     fn start(&mut self);
     fn get_metadata(&self) -> Metadata;
+    fn get_config(&self) -> HashMap<String, String>;
     fn destroy(&mut self);
     fn clone_box(&self) -> Box<dyn Plugin>;
 }
@@ -90,8 +92,21 @@ struct Worker {
     thread: std::thread::JoinHandle<()>,
 }
 
+#[derive(Clone)]
+pub struct LoadedPlugin {
+    pub plugin: Box<dyn Plugin>,
+    pub metadata: Metadata,
+    pub config: HashMap<String, String>,
+}
+
+#[derive(Clone, serde::Serialize, Debug)]
+pub struct PluginData {
+    pub metadata: Metadata,
+    pub config: HashMap<String, String>,
+}
+
 pub struct PluginManager {
-    pub plugins: HashMap<String, Box<dyn Plugin>>,
+    plugins: HashMap<String, LoadedPlugin>,
     client_state: Arc<Mutex<ClientState>>,
     workers: Vec<Worker>,
 }
@@ -134,7 +149,12 @@ impl PluginManager {
         for mut plugin in plugins {
             let metadata = plugin.get_metadata();
             plugin.init(Arc::clone(&self.client_state));
-            self.plugins.insert(metadata.name.clone(), plugin.clone());
+            let loaded_plugin = LoadedPlugin {
+                metadata: metadata.clone(),
+                plugin: plugin.clone(),
+                config: plugin.get_config(),
+            };
+            self.plugins.insert(metadata.name.clone(), loaded_plugin);
             self.workers.push(Worker {
                 id: 0,
                 plugin_name: metadata.name.clone(),
@@ -146,6 +166,25 @@ impl PluginManager {
             println!("Plugin {} initialized!", metadata.name);
         }
     }
+
+    pub fn get_plugins(&self) -> HashMap<String, PluginData> {
+        let mut loaded_plugins = HashMap::new();
+        for (name, loaded_plugin) in self.plugins.iter() {
+            loaded_plugins.insert(
+                name.clone(),
+                PluginData {
+                    metadata: loaded_plugin.metadata.clone(),
+                    config: loaded_plugin.config.clone(),
+                },
+            );
+        }
+        loaded_plugins
+    }
+
+    pub fn get_plugin_mut(&mut self, name: &str) -> Option<&mut LoadedPlugin> {
+        self.plugins.get_mut(name)
+    }
+
     pub fn get_client_state(&self) -> MutexGuard<ClientState> {
         loop {
             let client_state_guard = self.client_state.try_lock();
