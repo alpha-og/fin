@@ -107,6 +107,10 @@ impl Plugin for FsPlugin {
     fn clone_box(&self) -> Box<dyn Plugin> {
         Box::new(self.clone())
     }
+
+    fn get_config(&self) -> std::collections::HashMap<String, String> {
+        std::collections::HashMap::new()
+    }
 }
 
 impl FsPlugin {

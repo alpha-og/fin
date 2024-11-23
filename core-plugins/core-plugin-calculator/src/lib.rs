@@ -1,6 +1,9 @@
 mod token;
 
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use plugin_api::Plugin;
 use token::Token;
@@ -73,6 +76,10 @@ impl Plugin for CalculatorPlugin {
     }
     fn clone_box(&self) -> Box<dyn Plugin> {
         Box::new(self.clone())
+    }
+
+    fn get_config(&self) -> HashMap<String, String> {
+        HashMap::new()
     }
 }
 
