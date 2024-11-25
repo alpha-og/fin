@@ -21,10 +21,11 @@ export type T_SettingsStore = {
   refreshPlugins: () => void;
   updatePlugin: (plugin: T_Plugin) => void;
   setSelectedPlugin: (selectedPlugin: string | null) => void;
+  getSelectedPlugin: () => T_Plugin | null;
   setQuery: (query: string) => void;
 };
 
-export const useSettingsStore = create<T_SettingsStore>((set) => ({
+export const useSettingsStore = create<T_SettingsStore>((set, get) => ({
   query: "",
   plugins: {},
   selectedPlugin: null,
@@ -43,5 +44,12 @@ export const useSettingsStore = create<T_SettingsStore>((set) => ({
       },
     })),
   setSelectedPlugin: (selectedPlugin: string | null) => set({ selectedPlugin }),
+  getSelectedPlugin: () => {
+    const { selectedPlugin, plugins } = get();
+    if (selectedPlugin === null) {
+      return null;
+    }
+    return plugins[selectedPlugin];
+  },
   setQuery: (query: string) => set({ query }),
 }));
