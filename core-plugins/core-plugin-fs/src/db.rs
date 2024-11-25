@@ -27,6 +27,7 @@ impl Db {
         tokio::runtime::Runtime::new()
             .expect("Failed to create Tokio runtime")
             .block_on(async {
+                dbg!("Connecting to database: {:?}", &self.connection_url);
                 let pool = sqlx::SqlitePool::connect(&self.connection_url.as_ref().unwrap())
                     .await
                     .unwrap();
@@ -43,6 +44,7 @@ impl Db {
 
     fn get_database_url(database_url: Option<String>) -> Option<String> {
         if let Some(database_url) = database_url {
+            println!("Using custom database URL");
             Some(database_url)
         } else {
             match env::var("DATABASE_URL") {
@@ -50,7 +52,7 @@ impl Db {
                 Err(..) => {
                     if let Some(base_dirs) = BaseDirs::new() {
                         let home_dir = base_dirs.home_dir();
-                        println!("Default path");
+                        println!("DATABASE_URL not found, using default path");
                         std::path::Path::join(home_dir, ".config/fin/cache.sqlite")
                             .to_str()
                             .map(|path| path.to_string())
