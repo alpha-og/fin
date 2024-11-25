@@ -50,21 +50,19 @@ function PluginConfig() {
                     type="text"
                     placeholder={config[1]}
                     className="w-full px-2 py-[0.1rem] rounded-md bg-white/5 outline-none focus:outline-none"
-                    onChange={(e) => {
+                    onBlur={(e) => {
                       updatePlugin({
                         ...getSelectedPlugin()!,
                         config: {
                           ...getSelectedPlugin()!.config,
-                          [config[0]]: e.target.value,
+                          [config[0]]: e.currentTarget.value,
                         },
                       });
-                      console.log(e);
                       invoke("update_plugin_config", {
                         pluginName: getSelectedPlugin()!.metadata.name,
                         key: config[0],
-                        value: e.target.value,
+                        value: e.currentTarget.value,
                       });
-                      console.log(getSelectedPlugin()!.config);
                     }}
                   />
                 </li>
