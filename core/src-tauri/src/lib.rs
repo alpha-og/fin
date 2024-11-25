@@ -110,7 +110,6 @@ fn get_plugins(
         if plugin_manager_guard.is_ok() {
             let plugin_manager = plugin_manager_guard.expect("Thread should not be poisoned");
             let plugins = plugin_manager.get_plugins();
-            println!("Plugins: {:?}", plugins);
             break Ok(plugins);
         }
     }
@@ -128,9 +127,18 @@ fn update_plugin_config(
         let plugin_manager_guard = plugin_manager_state.try_lock();
         if plugin_manager_guard.is_ok() {
             let mut plugin_manager = plugin_manager_guard.expect("Thread should not be poisoned");
-            let loaded_plugin = plugin_manager
+            let loaded_plugin_arc = plugin_manager
                 .get_plugin_mut(&plugin_name)
                 .expect("Plugin not found");
+            println!("Updating config for plugin {}", plugin_name);
+            let mut loaded_plugin = loaded_plugin_arc
+                .lock()
+                .expect("Thread should not be poisoned");
+            println!(
+                "Config updated for plugin {} with {}={}",
+                plugin_name, key, value
+            );
+
             loaded_plugin.config.insert(key, value);
             break;
         }
