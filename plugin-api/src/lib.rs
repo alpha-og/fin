@@ -14,7 +14,11 @@ pub struct Metadata {
 }
 
 pub trait Plugin: Send + Sync {
-    fn init(&mut self, client_state_arc: Arc<Mutex<ClientState>>);
+    fn init(
+        &mut self,
+        client_state_arc: Arc<Mutex<ClientState>>,
+        loaded_plugin: Arc<Mutex<LoadedPlugin>>,
+    );
     fn start(&mut self);
     fn get_metadata(&self) -> Metadata;
     fn get_config(&self) -> HashMap<String, String>;
@@ -106,7 +110,7 @@ pub struct PluginData {
 }
 
 pub struct PluginManager {
-    plugins: HashMap<String, LoadedPlugin>,
+    plugins: HashMap<String, Arc<Mutex<LoadedPlugin>>>,
     client_state: Arc<Mutex<ClientState>>,
     workers: Vec<Worker>,
 }
@@ -148,13 +152,22 @@ impl PluginManager {
     pub fn init(&mut self, plugins: Vec<Box<dyn Plugin>>) {
         for mut plugin in plugins {
             let metadata = plugin.get_metadata();
-            plugin.init(Arc::clone(&self.client_state));
             let loaded_plugin = LoadedPlugin {
                 metadata: metadata.clone(),
                 plugin: plugin.clone(),
                 config: plugin.get_config(),
             };
-            self.plugins.insert(metadata.name.clone(), loaded_plugin);
+            self.plugins
+                .insert(metadata.name.clone(), Arc::new(Mutex::new(loaded_plugin)));
+            plugin.init(
+                Arc::clone(&self.client_state),
+                Arc::clone(
+                    &self
+                        .plugins
+                        .get(&metadata.name)
+                        .expect("Plugin should exist in plugin manager state"),
+                ),
+            );
             self.workers.push(Worker {
                 id: 0,
                 plugin_name: metadata.name.clone(),
@@ -163,13 +176,17 @@ impl PluginManager {
                     std::thread::sleep(time::Duration::from_millis(100));
                 }),
             });
+
             println!("Plugin {} initialized!", metadata.name);
         }
     }
 
     pub fn get_plugins(&self) -> HashMap<String, PluginData> {
         let mut loaded_plugins = HashMap::new();
-        for (name, loaded_plugin) in self.plugins.iter() {
+        for (name, loaded_plugin_arc) in self.plugins.iter() {
+            let loaded_plugin = loaded_plugin_arc
+                .lock()
+                .expect("Plugin mutex should not be poisoned");
             loaded_plugins.insert(
                 name.clone(),
                 PluginData {
@@ -181,7 +198,7 @@ impl PluginManager {
         loaded_plugins
     }
 
-    pub fn get_plugin_mut(&mut self, name: &str) -> Option<&mut LoadedPlugin> {
+    pub fn get_plugin_mut(&mut self, name: &str) -> Option<&mut Arc<Mutex<LoadedPlugin>>> {
         self.plugins.get_mut(name)
     }
 
@@ -202,12 +219,12 @@ impl PluginManager {
 
 impl ClientState {
     pub fn update_search_query(&mut self, query: String) {
-        println!("Searching for: {}", query);
+        // println!("Searching for: {}", query);
         self.search_query = query;
         self.search_results.clear();
     }
     pub fn update_search_results(&mut self, results: Vec<SearchResult>) {
-        println!("Search results: {:?}", results);
+        // println!("Search results: {:?}", results);
         self.search_results = results;
     }
     pub fn get_search_query(&self) -> &str {
