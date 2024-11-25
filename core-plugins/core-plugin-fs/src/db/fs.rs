@@ -44,11 +44,17 @@ pub struct Entry {
 pub struct Fs {}
 
 impl Fs {
-    pub fn index_file_system() -> Vec<Entry> {
+    pub fn index_file_system(root: Option<&str>) -> Vec<Entry> {
+        let walk;
+        if let Some(root) = root {
+            walk = WalkDir::new(root);
+        } else {
+            walk = WalkDir::new(BaseDirs::new().unwrap().home_dir());
+        }
         let mut entries = Vec::new();
 
         // index files
-        for entry in WalkDir::new(BaseDirs::new().unwrap().home_dir())
+        for entry in walk
             .min_depth(1)
             .max_depth(5)
             .follow_links(true)
