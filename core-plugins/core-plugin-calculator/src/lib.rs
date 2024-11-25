@@ -24,7 +24,11 @@ impl Default for CalculatorPlugin {
 }
 
 impl Plugin for CalculatorPlugin {
-    fn init(&mut self, client_state_arc: Arc<Mutex<plugin_api::ClientState>>) {
+    fn init(
+        &mut self,
+        client_state_arc: Arc<Mutex<plugin_api::ClientState>>,
+        _loaded_plugin: Arc<Mutex<plugin_api::LoadedPlugin>>,
+    ) {
         self.client_state = client_state_arc;
         println!("Calculator plugin initialized!");
     }

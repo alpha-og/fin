@@ -3,7 +3,10 @@ mod db;
 
 use plugin_api::Plugin;
 use sqlx::Row;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 #[derive(Clone)]
 pub struct FsPlugin {
@@ -11,25 +14,44 @@ pub struct FsPlugin {
     db: db::Db,
     cache: cache::Cache,
     client_state: Arc<Mutex<plugin_api::ClientState>>,
+    loaded_plugin: Option<Arc<Mutex<plugin_api::LoadedPlugin>>>,
+    config: HashMap<String, String>,
 }
 
 impl Default for FsPlugin {
     fn default() -> Self {
+        let mut config: HashMap<String, String> = HashMap::new();
+        let path = directories::BaseDirs::new()
+            .expect("Failed to get base directories")
+            .home_dir()
+            .to_str()
+            .expect("Failed to convert home directory to string")
+            .to_string();
+        config.insert("path".to_string(), path);
+
         Self {
             db: db::Db::default(),
             cache: cache::Cache::default(),
             results: Some(Vec::new()),
             client_state: Arc::new(Mutex::new(plugin_api::ClientState::default())),
+            loaded_plugin: None,
+            config,
         }
     }
 }
 
 impl Plugin for FsPlugin {
-    fn init(&mut self, client_state_arc: Arc<Mutex<plugin_api::ClientState>>) {
+    fn init(
+        &mut self,
+        client_state_arc: Arc<Mutex<plugin_api::ClientState>>,
+        loaded_plugin: Arc<Mutex<plugin_api::LoadedPlugin>>,
+    ) {
         self.client_state = client_state_arc;
-        self.db.init(Some(
-            "/Users/athulanoop/.config/fin/cache.sqlite".to_string(),
-        ));
+        self.loaded_plugin = Some(loaded_plugin);
+        // self.db.init(Some(
+        //     "/Users/athulanoop/.config/fin/cache.sqlite".to_string(),
+        // ));
+        self.db.init(None);
 
         tokio::runtime::Runtime::new()
             .expect("Failed to create Tokio runtime")
@@ -45,6 +67,31 @@ impl Plugin for FsPlugin {
             .expect("Failed to lock client state");
 
         let query = client_state.get_search_query();
+        if let Some(loaded_plugin) = &self.loaded_plugin {
+            let config = loaded_plugin
+                .lock()
+                .expect("Failed to lock loaded plugin")
+                .config
+                .clone();
+            if let Some(path) = config.get("path") {
+                if let Some(existing_path) = &self.cache.filesystem_root {
+                    if existing_path.ne(path) {
+                        self.cache.filesystem_root = Some(path.to_string());
+                        dbg!("Re-indexing filesystem with config: {:?}", config);
+                        tokio::runtime::Runtime::new()
+                            .expect("Failed to create Tokio runtime")
+                            .block_on(self.cache.cache_file_system(&self.db, true, true))
+                    } else {
+                    }
+                } else {
+                    self.cache.filesystem_root = Some(path.to_string());
+                    dbg!("Re-indexing filesystem with config: {:?}", config);
+                    tokio::runtime::Runtime::new()
+                        .expect("Failed to create Tokio runtime")
+                        .block_on(self.cache.cache_file_system(&self.db, true, true))
+                }
+            }
+        }
         let result = self.get_files(query);
         if let Ok(result) = result {
             if let Some(existing_result) = &self.results {
@@ -109,7 +156,7 @@ impl Plugin for FsPlugin {
     }
 
     fn get_config(&self) -> std::collections::HashMap<String, String> {
-        std::collections::HashMap::new()
+        self.config.clone()
     }
 }
 
