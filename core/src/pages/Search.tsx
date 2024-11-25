@@ -178,6 +178,7 @@ function Search() {
             response = (response as T_Result[]).sort(
               (a, b) => b.priority - a.priority,
             );
+            console.log(response);
             setResults(response as T_Result[]);
           }
         });
@@ -195,7 +196,7 @@ function Search() {
   }, [inputRef]);
 
   useEffect(() => {
-    if (results.length > 0 && results.length > 0) {
+    if ((results.length > 0 && results.length > 0) || query) {
       currentWindow.setSize(new LogicalSize(600, 400));
       listItemRefs.current = Array(results.length)
         .fill(null)
@@ -204,7 +205,7 @@ function Search() {
     } else {
       currentWindow.setSize(new LogicalSize(600, 50));
     }
-  }, [results]);
+  }, [query, results]);
   useEffect(() => {
     if (selected !== null) {
       selectedListItemRef.current = listItemRefs.current[selected].current!;

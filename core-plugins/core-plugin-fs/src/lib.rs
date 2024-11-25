@@ -92,21 +92,14 @@ impl Plugin for FsPlugin {
                 }
             }
         }
+        if !client_state.get_query_changed() {
+            return;
+        }
         let result = self.get_files(query);
         if let Ok(result) = result {
-            if let Some(existing_result) = &self.results {
-                let mut same = true;
-                for result in &result {
-                    if !existing_result.contains(&result) {
-                        same = false;
-                    }
-                }
-                if same {
-                    return;
-                }
-            }
             self.results = Some(result);
         } else {
+            println!("No results");
             self.results = None;
         }
         if let Some(results) = &self.results {

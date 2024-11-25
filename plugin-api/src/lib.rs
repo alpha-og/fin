@@ -79,6 +79,7 @@ impl SearchResult {
 pub struct ClientState {
     search_query: String,
     search_results: Vec<SearchResult>,
+    query_changed: bool,
 }
 
 impl Default for ClientState {
@@ -86,6 +87,7 @@ impl Default for ClientState {
         Self {
             search_query: String::new(),
             search_results: vec![],
+            query_changed: false,
         }
     }
 }
@@ -220,12 +222,20 @@ impl PluginManager {
 impl ClientState {
     pub fn update_search_query(&mut self, query: String) {
         // println!("Searching for: {}", query);
-        self.search_query = query;
-        self.search_results.clear();
+        if self.search_query != query {
+            self.query_changed = true;
+            self.search_query = query;
+            self.search_results.clear();
+        } else {
+            self.query_changed = false;
+        }
     }
     pub fn update_search_results(&mut self, results: Vec<SearchResult>) {
         // println!("Search results: {:?}", results);
         self.search_results = results;
+    }
+    pub fn get_query_changed(&self) -> bool {
+        self.query_changed
     }
     pub fn get_search_query(&self) -> &str {
         &self.search_query
