@@ -16,6 +16,7 @@ pub struct FsPlugin {
     client_state: Arc<Mutex<plugin_api::ClientState>>,
     loaded_plugin: Option<Arc<Mutex<plugin_api::LoadedPlugin>>>,
     config: HashMap<String, String>,
+    last_query: String,
 }
 
 impl Default for FsPlugin {
@@ -36,6 +37,7 @@ impl Default for FsPlugin {
             client_state: Arc::new(Mutex::new(plugin_api::ClientState::default())),
             loaded_plugin: None,
             config,
+            last_query: String::new(),
         }
     }
 }
@@ -92,14 +94,15 @@ impl Plugin for FsPlugin {
                 }
             }
         }
-        if !client_state.get_query_changed() {
+        if self.last_query == query {
             return;
+        } else {
+            self.last_query = query.to_string();
         }
         let result = self.get_files(query);
         if let Ok(result) = result {
             self.results = Some(result);
         } else {
-            println!("No results");
             self.results = None;
         }
         if let Some(results) = &self.results {
