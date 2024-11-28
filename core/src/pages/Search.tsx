@@ -178,7 +178,6 @@ function Search() {
             response = (response as T_Result[]).sort(
               (a, b) => b.priority - a.priority,
             );
-            console.log(response);
             setResults(response as T_Result[]);
           }
         });
@@ -188,7 +187,7 @@ function Search() {
     return () => {
       clearInterval(interval);
     };
-  }, [query, results]);
+  }, [query]);
 
   useEffect(() => {
     clearSearchRef.current = inputRef.current!;

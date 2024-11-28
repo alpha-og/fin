@@ -21,14 +21,18 @@ export type T_SearchStore = {
   setSelectedHistory: (selectedHistory: number | null) => void;
 };
 
-export const useSearchStore = create<T_SearchStore>((set) => ({
+export const useSearchStore = create<T_SearchStore>((set, get) => ({
   query: "",
   results: [],
   history: [],
   selected: null,
   selectedHistory: null,
   setQuery: (query: string) => set({ query }),
-  setResults: (results: T_Result[]) => set({ results }),
+  setResults: (results: T_Result[]) => {
+    if (JSON.stringify(results) !== JSON.stringify(get().results)) {
+      set({ results });
+    }
+  },
   setHistory: (history: string[]) => set({ history }),
   setSelected: (selected: number | null) => set({ selected }),
   setSelectedHistory: (selectedHistory: number | null) =>
