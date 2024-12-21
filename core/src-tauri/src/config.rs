@@ -35,7 +35,7 @@ impl Config {
             .expect("Should be valid path");
         if let Some(base_dirs) = BaseDirs::new() {
             let home_dir = base_dirs.home_dir();
-            let source = home_dir.join(".config/fin/fin.toml");
+            let source = home_dir.join(".config/rune/rune.toml");
             if source.exists() {
                 self.source = source;
             }

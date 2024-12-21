@@ -1,7 +1,7 @@
 {
-  "productName": "fin",
+  "productName": "rune",
   "version": "0.0.1",
-  "identifier": "com.fin.app",
+  "identifier": "com.rune.app",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "decorations": false,
-        "title": "Fin",
+        "title": "rune",
         "transparent": true,
         "resizable": false,
         "width": 600,

@@ -239,7 +239,7 @@ function Search() {
           autoComplete="off"
           autoCorrect="off"
           spellCheck="false"
-          placeholder="Fin"
+          placeholder="rune"
           autoFocus
           className="w-full px-1 rounded-md text-white text-lg bg-transparent outline-none focus:outline-none"
         />
